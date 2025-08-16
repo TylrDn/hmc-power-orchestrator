@@ -1,7 +1,8 @@
-"""HTTP utilities with retry handling."""
+"""HTTP utilities with retry handling and a simple circuit breaker."""
 
 from __future__ import annotations
 
+from time import monotonic
 from typing import Any
 from urllib.parse import urljoin
 
@@ -9,7 +10,13 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .exceptions import AuthError, HttpError, NetworkError, RateLimitError
+from .exceptions import (
+    AuthError,
+    NetworkError,
+    PermanentError,
+    RateLimitError,
+    TransientError,
+)
 
 
 class HTTPClient:
@@ -23,6 +30,8 @@ class HTTPClient:
         retries: int = 3,
         timeout: float = 30.0,
         auth: tuple[str, str] | None = None,
+        cb_threshold: int = 5,
+        cb_cooldown: float = 30.0,
     ) -> None:
         self.base_url = base_url
         self.retries = retries
@@ -44,20 +53,63 @@ class HTTPClient:
         if auth is not None:
             self._session.auth = auth
 
+        # circuit breaker state
+        self._cb_threshold = cb_threshold
+        self._cb_cooldown = cb_cooldown
+        self._cb_failures = 0
+        self._cb_state = "closed"  # closed | open | half-open
+        self._cb_opened_at = 0.0
+
+    # ------------------------------------------------------------------
+    # circuit breaker helpers
+    def _cb_before_request(self, method: str, url: str) -> None:
+        if self._cb_state == "open":
+            if monotonic() - self._cb_opened_at < self._cb_cooldown:
+                raise TransientError(method, url, snippet="circuit open")
+            # cooldown passed – probe request
+            self._cb_state = "half-open"
+
+    def _cb_record_success(self) -> None:
+        self._cb_failures = 0
+        self._cb_state = "closed"
+
+    def _cb_record_failure(self) -> None:
+        if self._cb_state == "half-open":
+            self._cb_state = "open"
+            self._cb_opened_at = monotonic()
+            self._cb_failures = self._cb_threshold
+            return
+        self._cb_failures += 1
+        if self._cb_failures >= self._cb_threshold:
+            self._cb_state = "open"
+            self._cb_opened_at = monotonic()
+
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
+        self._cb_before_request(method, url)
         try:
             response = self._session.request(
                 method, url, timeout=self.timeout, **kwargs
             )
         except requests.RequestException as exc:
+            self._cb_record_failure()
             raise NetworkError(exc) from exc
+
+        snippet = response.text[:200].strip().replace("\n", " ")
         if response.status_code == 401:
-            raise AuthError(response)
+            self._cb_record_success()
+            raise AuthError(method, url, response.status_code, snippet)
         if response.status_code == 429:
-            raise RateLimitError(response)
+            self._cb_record_failure()
+            raise RateLimitError(method, url, response.status_code, snippet)
+        if 500 <= response.status_code:
+            self._cb_record_failure()
+            raise TransientError(method, url, response.status_code, snippet)
         if response.status_code >= 400:
-            raise HttpError(response)
+            self._cb_record_success()
+            raise PermanentError(method, url, response.status_code, snippet)
+
+        self._cb_record_success()
         return response
 
     def get(self, path: str, **kwargs: Any) -> requests.Response:
