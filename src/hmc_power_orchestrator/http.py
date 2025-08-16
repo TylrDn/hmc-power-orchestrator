@@ -34,7 +34,7 @@ class _CircuitBreaker:
         self._threshold = threshold
         self._cooldown = cooldown
         self._failures = 0
-        self._state = CircuitBreakerState.CLOSED
+        self._state: CircuitBreakerState = CircuitBreakerState.CLOSED
         self._opened_at = 0.0
         self._lock = Lock()
 
@@ -119,13 +119,11 @@ class HTTPClient:
         self._cb = _CircuitBreaker(cb_threshold, cb_cooldown)
 
     @property
-    def _cb_state(
-        self,
-    ) -> CircuitBreakerState:  # pragma: no cover - for tests/introspection
+    def cb_state(self) -> CircuitBreakerState:  # pragma: no cover - for tests/introspection
         return self._cb.state
 
     @property
-    def _cb_failures(self) -> int:  # pragma: no cover - for tests/introspection
+    def cb_failures(self) -> int:  # pragma: no cover - for tests/introspection
         return self._cb.failures
 
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
