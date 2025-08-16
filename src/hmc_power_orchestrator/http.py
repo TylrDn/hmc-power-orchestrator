@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from threading import Lock
 from time import monotonic
 from typing import Any
 from urllib.parse import urljoin
@@ -59,30 +60,34 @@ class HTTPClient:
         self._cb_failures = 0
         self._cb_state = "closed"  # closed | open | half-open
         self._cb_opened_at = 0.0
+        self._cb_lock = Lock()
 
     # ------------------------------------------------------------------
     # circuit breaker helpers
     def _cb_before_request(self, method: str, url: str) -> None:
-        if self._cb_state == "open":
-            if monotonic() - self._cb_opened_at < self._cb_cooldown:
-                raise TransientError(method, url, snippet="circuit open")
-            # cooldown passed – probe request
-            self._cb_state = "half-open"
+        with self._cb_lock:
+            if self._cb_state == "open":
+                if monotonic() - self._cb_opened_at < self._cb_cooldown:
+                    raise TransientError(method, url, snippet="circuit open")
+                # cooldown passed – probe request
+                self._cb_state = "half-open"
 
     def _cb_record_success(self) -> None:
-        self._cb_failures = 0
-        self._cb_state = "closed"
+        with self._cb_lock:
+            self._cb_failures = 0
+            self._cb_state = "closed"
 
     def _cb_record_failure(self) -> None:
-        if self._cb_state == "half-open":
-            self._cb_state = "open"
-            self._cb_opened_at = monotonic()
-            self._cb_failures = self._cb_threshold
-            return
-        self._cb_failures += 1
-        if self._cb_failures >= self._cb_threshold:
-            self._cb_state = "open"
-            self._cb_opened_at = monotonic()
+        with self._cb_lock:
+            if self._cb_state == "half-open":
+                self._cb_state = "open"
+                self._cb_opened_at = monotonic()
+                self._cb_failures = self._cb_threshold
+                return
+            self._cb_failures += 1
+            if self._cb_failures >= self._cb_threshold:
+                self._cb_state = "open"
+                self._cb_opened_at = monotonic()
 
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
