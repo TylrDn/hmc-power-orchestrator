@@ -112,7 +112,12 @@ def test_circuit_breaker_recovery(monkeypatch):
 
     # move time forward past cooldown and return success
     fake_time[0] = 61.0
-    monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(200))
+
+    def succeed(*a, **k):
+        assert client._cb_state == "half-open"
+        return _fake_response(200)
+
+    monkeypatch.setattr(client._session, "request", succeed)
     client.get("/")
     assert client._cb_state == "closed"
     assert client._cb_failures == 0
