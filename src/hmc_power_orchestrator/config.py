@@ -1,29 +1,54 @@
 """Credential & configuration loading."""
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
+from getpass import getpass
 from pathlib import Path
 from typing import Optional
 
-import yaml
-from pydantic import BaseSettings, Field, SecretStr
+from .utils import parse_bool
 
 
-class Settings(BaseSettings):
-    base_url: str = Field(..., env="HMC_URL")
-    username: str = Field(..., env="HMC_USERNAME")
-    password: SecretStr = Field(..., env="HMC_PASSWORD")
-    verify_ssl: bool = Field(True, env="HMC_VERIFY_SSL")
-    ca_bundle: Optional[Path] = Field(None, env="HMC_CA_BUNDLE")
-    timeout: int = Field(30, env="HMC_TIMEOUT")
+@dataclass
+class Settings:
+    host: str
+    username: str
+    password: str
+    verify: bool = True
+    ca_bundle: Optional[Path] = None
+    timeout: int = 30
 
-    @classmethod
-    def from_file(cls, path: Path) -> "Settings":
-        data = yaml.safe_load(path.read_text())
-        return cls(**data)
+    @property
+    def base_url(self) -> str:
+        return f"https://{self.host}"
+
+
+class ConfigError(RuntimeError):
+    """Raised when mandatory configuration is missing."""
 
 
 def load() -> Settings:
-    file_path = Path.home() / ".hmc_orchestrator.yaml"
-    if file_path.exists():
-        return Settings.from_file(file_path)
-    return Settings()  # env var driven
+    """Load settings from environment variables, prompting for missing password."""
+    host = os.getenv("HMC_HOST")
+    if not host:
+        raise ConfigError("Environment variable HMC_HOST is required")
+    user = os.getenv("HMC_USER")
+    if not user:
+        raise ConfigError("Environment variable HMC_USER is required")
+    password = os.getenv("HMC_PASS")
+    if not password:
+        password = getpass("HMC password: ")
+    verify_env = os.getenv("HMC_VERIFY")
+    verify = parse_bool(verify_env, default=True)
+    ca_bundle_env = os.getenv("HMC_CA_BUNDLE")
+    ca_bundle = Path(ca_bundle_env) if ca_bundle_env else None
+    timeout = int(os.getenv("HMC_TIMEOUT", "30"))
+    return Settings(
+        host=host,
+        username=user,
+        password=password,
+        verify=verify if ca_bundle is None else True,
+        ca_bundle=ca_bundle,
+        timeout=timeout,
+    )

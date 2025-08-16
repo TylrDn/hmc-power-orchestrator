@@ -1,0 +1,7 @@
+targets:
+  - lpar: LPAR1
+    cpu: 4
+    mem: 8192
+  - lpar: LPAR2
+    cpu: 2
+    mem: 4096
