@@ -3,17 +3,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import requests
-
 
 @dataclass(eq=False)
 class HttpError(RuntimeError):
-    """Base error for unexpected HTTP responses.
-
-    Parameters are stored for richer error reporting and debugging.  The error
-    message is kept concise but includes the HTTP method, URL and status code as
-    well as a short snippet of the response body for quick inspection.
-    """
+    """Base error for unexpected HTTP responses."""
 
     method: str
     url: str
@@ -48,5 +41,5 @@ class PermanentError(HttpError):
 class NetworkError(RuntimeError):
     """Network-level error while communicating with the HMC."""
 
-    def __init__(self, exc: requests.RequestException) -> None:
+    def __init__(self, exc: Exception) -> None:
         super().__init__(str(exc))

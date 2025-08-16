@@ -7,19 +7,23 @@ requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [{name = "Project Contributors", email = "contributors@example.com"}]
 dependencies = [
-    "requests>=2.31,<3",
+    "httpx>=0.25,<1",
+    "pydantic>=2,<3",
     "typer>=0.9,<1",
     "rich>=13,<14",
     "pyyaml>=6,<7",
-    "tabulate>=0.9,<1",
+    "structlog>=23,<24",
+    "prometheus-client>=0.19,<1",
 ]
 optional-dependencies.dev = [
     "pytest>=7",
     "pytest-cov>=4",
-    "responses>=0.25",
+    "respx>=0.20",
     "ruff>=0.5",
     "mypy>=1.8",
     "coverage>=7",
+    "bandit>=1.7",
+    "pip-audit>=2.7",
 ]
 
 [project.scripts]
@@ -37,7 +41,7 @@ python_version = "3.10"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["requests", "requests.*", "urllib3.*", "yaml"]
+module = ["httpx", "yaml"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
