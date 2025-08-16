@@ -1,11 +1,10 @@
 """Minimal HMC REST API client."""
 from __future__ import annotations
 
-from typing import Iterable
-
-import httpx
+from typing import Any, Iterable
 
 from .config import Settings
+from .http import HTTPClient
 
 
 class HMCClient:
@@ -13,22 +12,24 @@ class HMCClient:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._client = httpx.Client(
+        verify: bool | str = (
+            settings.verify if settings.ca_bundle is None else str(settings.ca_bundle)
+        )
+        self._client = HTTPClient(
             base_url=settings.base_url,
-            auth=(settings.username, settings.password.get_secret_value()),
-            verify=settings.verify_ssl if settings.ca_bundle is None else settings.ca_bundle,
+            auth=(settings.username, settings.password),
+            verify=verify,
             timeout=settings.timeout,
-            transport=httpx.HTTPTransport(retries=3),
+            retries=3,
         )
 
-    def list_lpars(self) -> Iterable[dict]:
+    def list_lpars(self) -> Iterable[dict[str, Any]]:
         resp = self._client.get("/api/lpars")
-        resp.raise_for_status()
-        return resp.json()
+        return resp.json()  # type: ignore[no-any-return]
 
     def resize_lpar(self, lpar: str, cpu: int, mem: int) -> None:
         payload = {"cpu": cpu, "mem": mem}
-        self._client.post(f"/api/lpars/{lpar}/resize", json=payload).raise_for_status()
+        self._client.post(f"/api/lpars/{lpar}/resize", json=payload)
 
     def close(self) -> None:
         self._client.close()

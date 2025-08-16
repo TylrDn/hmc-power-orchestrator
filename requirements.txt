@@ -1,6 +1,5 @@
-httpx[http2]>=0.27
-typer>=0.9
-pydantic>=2
-rich>=13
-pyyaml>=6
-tabulate>=0.9
+requests>=2.31,<3
+typer>=0.9,<1
+rich>=13,<14
+pyyaml>=6,<7
+tabulate>=0.9,<1
