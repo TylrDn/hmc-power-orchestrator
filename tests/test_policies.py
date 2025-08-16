@@ -23,6 +23,18 @@ def test_decide_vcpu_up():
     assert decide_vcpu(2, metrics, policy) == 3
 
 
+def test_decide_vcpu_max_boundary():
+    policy = sample_policy()
+    metrics = LparMetrics(cpu_idle_pct=10, cpu_ready_pct=30, mem_free_mb=0)
+    assert decide_vcpu(policy.max_vcpu, metrics, policy) == policy.max_vcpu
+
+
+def test_decide_vcpu_min_boundary():
+    policy = sample_policy()
+    metrics = LparMetrics(cpu_idle_pct=80, cpu_ready_pct=0, mem_free_mb=8192)
+    assert decide_vcpu(policy.min_vcpu, metrics, policy) == policy.min_vcpu
+
+
 def test_decide_vcpu_down():
     policy = sample_policy()
     metrics = LparMetrics(cpu_idle_pct=80, cpu_ready_pct=1, mem_free_mb=0)
@@ -37,3 +49,9 @@ def test_decide_memory_up_down_bounds():
     assert decide_memory(2048, metrics_low, policy) == 3072
     # scale down but not below min
     assert decide_memory(1024, metrics_high, policy) == 1024
+
+
+def test_decide_memory_max_boundary():
+    policy = sample_policy()
+    metrics = LparMetrics(cpu_idle_pct=0, cpu_ready_pct=0, mem_free_mb=512)
+    assert decide_memory(policy.max_mem_mb, metrics, policy) == policy.max_mem_mb

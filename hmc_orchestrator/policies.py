@@ -1,8 +1,9 @@
 """Scaling policy model and decisions."""
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
-from typing import Iterable, Dict, Any
+from dataclasses import dataclass, fields, field
+from typing import Dict, Any
+import logging
 
 import yaml
 
@@ -20,7 +21,7 @@ class ScalingPolicy:
     scale_up_mem_free_mb: int
     scale_down_mem_free_mb: int
     step_mem_mb: int
-    exclude_lpars: Iterable[str]
+    exclude_lpars: list[str] = field(default_factory=list)
 
     @staticmethod
     def from_file(path: str) -> "ScalingPolicy":
@@ -28,7 +29,12 @@ class ScalingPolicy:
         with open(path, "r", encoding="utf-8") as fh:
             data: Dict[str, Any] = yaml.safe_load(fh) or {}
         valid_keys = {f.name for f in fields(ScalingPolicy)}
+        unknown = set(data) - valid_keys
+        if unknown:
+            logging.warning("Unknown policy keys: %s", ", ".join(sorted(unknown)))
         filtered = {k: v for k, v in data.items() if k in valid_keys}
+        if "exclude_lpars" in filtered and not isinstance(filtered["exclude_lpars"], list):
+            filtered["exclude_lpars"] = list(filtered["exclude_lpars"])
         return ScalingPolicy(**filtered)
 
 

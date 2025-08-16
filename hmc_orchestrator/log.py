@@ -5,5 +5,6 @@ import logging
 
 
 def setup_logging(verbosity: int = 0) -> None:
-    level = logging.WARNING - (10 * verbosity)
+    levels = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
+    level = levels.get(verbosity, logging.DEBUG)
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 
@@ -38,11 +39,18 @@ def load_config(env_file: str | None = None, **overrides) -> Config:
     env: dict[str, str] = {k: os.getenv(k, v) for k, v in DEFAULT_ENV.items()}
     env.update({k: str(v) for k, v in overrides.items() if v is not None})
 
-    verify = env["HMC_VERIFY"].lower() == "true"
+    def parse_bool(val: str) -> bool:
+        return val.strip().lower() in {"true", "1", "yes", "on"}
+
+    verify = parse_bool(env["HMC_VERIFY"])
     managed_system = env["HMC_MANAGED_SYSTEM"] or None
 
+    host = env["HMC_HOST"]
+    if host and not urlparse(host).scheme:
+        host = "https://" + host
+
     return Config(
-        host=env["HMC_HOST"],
+        host=host,
         user=env["HMC_USER"],
         password=env["HMC_PASS"],
         verify=verify,

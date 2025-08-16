@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import getpass
+import os
 from typing import Any
 
 from .config import load_config
@@ -68,7 +70,6 @@ def main(argv: Any = None) -> int:
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("--host")
     parser.add_argument("--user")
-    parser.add_argument("--password")
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument("--managed-system")
     parser.add_argument("--timeout", type=int)
@@ -88,6 +89,12 @@ def main(argv: Any = None) -> int:
     metrics_cmd.add_argument("--json", action="store_true")
 
     args = parser.parse_args(argv)
+
+    password = os.environ.get("HMC_PASS")
+    if password is None:
+        password = getpass.getpass("HMC password: ")
+    args.password = password
+
     setup_logging(args.verbose)
     api = build_api(args)
 
