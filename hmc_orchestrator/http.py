@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from typing import Any
+from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -41,7 +42,7 @@ class HttpClient:
         self.session.mount("https://", adapter)
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        url = self.base_url.rstrip("/") + path
+        url = urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
         logging.debug("HTTP %s %s", method, url)
         resp = self.session.request(method, url, timeout=self.timeout, verify=self.verify, **kwargs)
         if resp.status_code == 401:

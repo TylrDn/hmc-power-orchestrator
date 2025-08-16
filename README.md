@@ -26,6 +26,9 @@ python -m hmc_orchestrator.cli list-systems
 python -m hmc_orchestrator.cli list-lpars --ms "$HMC_MANAGED_SYSTEM"
 ```
 
+The CLI reads connection details from environment variables or `.env`. If
+`HMC_PASS` is not set, you will be securely prompted for it at runtime.
+
 ## Example Policy
 
 A sample autoscaling policy is provided in `examples/policy.yaml`:
@@ -43,11 +46,8 @@ step_mem_mb: 1024
 exclude_lpars: ["VIOS1", "VIOS2"]
 ```
 
-Run a dry‑run autoscale with:
-
-```bash
-python -m hmc_orchestrator.cli auto-adjust --policy examples/policy.yaml --dry-run -v
-```
+The CLI currently does not implement automatic policy enforcement, but the
+above file serves as a reference for future work.
 
 ## Safety Notes
 
