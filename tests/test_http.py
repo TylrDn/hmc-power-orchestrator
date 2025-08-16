@@ -89,3 +89,30 @@ def test_circuit_breaker(monkeypatch):
     # circuit should now be open and raise without calling request
     with pytest.raises(TransientError):
         client.get("/")
+
+
+def test_circuit_breaker_recovery(monkeypatch):
+    client = HTTPClient("https://example.com", cb_threshold=2, cb_cooldown=60)
+
+    fake_time = [0.0]
+
+    def fake_monotonic():
+        return fake_time[0]
+
+    monkeypatch.setattr("hmc_power_orchestrator.http.monotonic", fake_monotonic)
+
+    def boom(*a, **k):
+        raise requests.Timeout("fail")
+
+    monkeypatch.setattr(client._session, "request", boom)
+    with pytest.raises(NetworkError):
+        client.get("/")
+    with pytest.raises(NetworkError):
+        client.get("/")
+
+    # move time forward past cooldown and return success
+    fake_time[0] = 61.0
+    monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(200))
+    client.get("/")
+    assert client._cb_state == "closed"
+    assert client._cb_failures == 0
