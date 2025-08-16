@@ -116,10 +116,10 @@ def test_circuit_breaker_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_time[0] = 61.0
 
     def succeed(*a: Any, **k: Any) -> Any:
-        assert client._cb_state == CircuitBreakerState.HALF_OPEN
+        assert client.cb_state == CircuitBreakerState.HALF_OPEN
         return _fake_response(200)
 
     monkeypatch.setattr(client._session, "request", succeed)
     client.get("/")
-    assert client._cb_state == CircuitBreakerState.CLOSED
-    assert client._cb_failures == 0
+    assert client.cb_state == CircuitBreakerState.CLOSED
+    assert client.cb_failures == 0
