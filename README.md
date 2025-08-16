@@ -1,83 +1,67 @@
 # hmc-power-orchestrator
 
-Command line tool for inspecting IBM Power Hardware Management Console (HMC)
-objects and experimenting with autoscaling policies.  Current capabilities
-include:
+Production ready CLI to inspect and resize IBM Power HMC logical partitions.
 
-- list managed systems and logical partitions (LPARs)
-- preview CPU/memory changes via policy *dry-run*
-- validate autoscaling policy files
+Features include:
 
-> **Note**: applying policy changes to the HMC is **not implemented** yet.  All
-> actions are read‑only or dry‑run previews.
+- resilient HTTP client with retries and correlation IDs
+- policy planning and guarded apply (`--apply --confirm`)
+- structured JSON logging and Prometheus metrics
+- append only audit log
 
 ## Quickstart
 
 ```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -e .[dev]
-cp .env.example .env  # edit with your credentials
-hmc-orchestrator --help
+pip install hmc-power-orchestrator
+# or with pipx
+pipx install hmc-power-orchestrator
 ```
 
-Example `.env` values:
+Create `~/.hmc_orchestrator.yaml` with your credentials and then:
 
 ```bash
-export HMC_HOST=hmc.example.com
-export HMC_USER=myuser
-# omit HMC_PASS to be prompted securely
+hmc-orchestrator inventory
+hmc-orchestrator plan examples/example-policy.json
+hmc-orchestrator apply examples/example-policy.json --apply --confirm
 ```
 
-Alternatively, configuration values can be provided in a YAML file at
-`~/.hmc_orchestrator.yaml`:
+Each run uses a unique run id (override with `--run-id`). Previews and apply
+artifacts are written under `--output` (default `./run`).
+
+## Configuration
+
+Environment variables or `~/.hmc_orchestrator.yaml` are supported:
 
 ```yaml
 host: hmc.example.com
 username: myuser
 password: secret
-# verify: true
-# ca_bundle: /path/to/ca.pem
 ```
 
-Listing LPARs:
+## Policy Schema
+
+Policies are versioned. Example v1 policy:
+
+```json
+{
+  "policy_version": 1,
+  "targets": [
+    {"lpar": "L1", "cpu": 2, "mem": 2048}
+  ]
+}
+```
+
+Generate the JSON schema via:
 
 ```bash
-hmc-orchestrator list
+python -c "import json, hmc_power_orchestrator.policy as p; print(p.Policy().to_json_schema())"
 ```
 
-Validating a policy:
+## Safety Rails
 
-```bash
-hmc-orchestrator policy validate examples/sample-policy.yaml
-```
-
-Dry-run a policy:
-
-```bash
-hmc-orchestrator policy dry-run examples/sample-policy.yaml
-```
-
-## HMC prerequisites
-
-- User with sufficient privileges to query systems and LPAR metrics
-- Performance and Capacity Monitoring (PCM) must be enabled
-- Tested against HMC API version 2.0 on firmware 950+
-
-## Security
-
-TLS certificate verification is enabled by default.  Disabling it via
-`--no-verify` is strongly discouraged as it exposes credentials on the wire.
-
-## Example policy file
-
-See [examples/sample-policy.yaml](examples/sample-policy.yaml).  A dry run
-produces output similar to:
-
-```
-Would resize LPAR1 -> cpu=4, mem=8192
-Would resize LPAR2 -> cpu=2, mem=4096
-```
+`apply` requires both `--apply` and `--confirm`. Without `--apply` a dry run is
+performed. Outputs are logged in structured JSON and optional audit log via
+`--audit-log file`.
 
 ## License
 

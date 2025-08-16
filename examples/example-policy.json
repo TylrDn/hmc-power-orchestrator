@@ -1,0 +1,7 @@
+{
+  "policy_version": 1,
+  "targets": [
+    {"lpar": "L1", "cpu": 2, "mem": 2048, "min_cpu": 1, "max_cpu": 4},
+    {"lpar": "L2", "cpu": 3, "mem": 4096}
+  ]
+}

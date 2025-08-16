@@ -1,98 +1,101 @@
-"""Command-line interface using Typer."""
+"""Command-line interface using Typer with safety rails."""
 from __future__ import annotations
+
+import json
+from pathlib import Path
+from uuid import uuid4
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
-from . import __version__, api, config, utils
+from .config import load
+from .hmc_client import HMCClient
+from .observability import AuditLogger, get_logger
+from .policy import Policy
 
 app = typer.Typer(help="IBM HMC LPAR CPU/memory orchestrator")
-policy_app = typer.Typer(help="Autoscaling policy operations")
-app.add_typer(policy_app, name="policy")
 console = Console()
 
 
-@app.command(name="list")
-def list_cmd() -> None:
-    """List managed systems and LPARs."""
-    cfg = config.load()
-    client = api.HMCClient(cfg)
-    data = list(client.list_lpars())
-    utils.print_table(data)
+def _print_table(rows: list[dict[str, str]]) -> None:
+    table = Table(show_header=True)
+    if rows:
+        for key in rows[0]:
+            table.add_column(key)
+        for row in rows:
+            table.add_row(*[str(row[k]) for k in row])
+    console.print(table)
 
 
 @app.command()
-def resize(
-    lpar: str,
-    cpu: int = typer.Option(...),
-    mem: int = typer.Option(...),
-    dry_run: bool = typer.Option(False, help="Show changes without applying"),
-    yes: bool = typer.Option(False, "--yes", help="Assume yes for any confirmations"),
+def inventory(run_id: str = typer.Option(None)) -> None:
+    """List LPAR inventory."""
+    rid = run_id or uuid4().hex
+    cfg = load()
+    client = HMCClient(cfg.base_url, run_id=rid)
+    data = list(client.iter_collection("/api/lpars"))
+    _print_table(data)
+    client.close()
+
+
+@app.command()
+def plan(
+    policy_file: Path,
+    run_id: str = typer.Option(None),
+    output: Path = typer.Option(Path("run")),
 ) -> None:
-    """Resize CPU or memory for an LPAR."""
-    cfg = config.load()
-    client = api.HMCClient(cfg)
-    msg = (
-        f"{'(DRY RUN) ' if dry_run else ''}Resizing {lpar} -> "
-        f"cpu={cpu}, mem={mem}"
-    )
-    console.log(msg)
-    if not dry_run and not yes:
-        proceed = typer.confirm("Apply changes?", default=False)
-        if not proceed:
-            raise typer.Exit()
-    if not dry_run:
-        client.resize_lpar(lpar, cpu, mem)
+    """Preview actions for a policy."""
+    rid = run_id or uuid4().hex
+    logger = get_logger(rid)
+    policy = Policy.model_validate_json(policy_file.read_text())
+    output.mkdir(parents=True, exist_ok=True)
+    preview = [t.model_dump() for t in policy.targets]
+    (output / f"plan-{rid}.json").write_text(json.dumps(preview, indent=2))
+    _print_table([{**t} for t in preview])
+    logger.info("plan_generated", targets=len(preview))
 
 
-@policy_app.command("validate")
-def policy_validate(file: typer.FileText) -> None:
-    """Validate a policy file."""
-    try:
-        utils.load_policy(file.read())
-        console.print("Policy OK")
-    except Exception as exc:  # pragma: no cover - simple validation
-        console.print(f"[red]Validation failed:[/red] {exc}")
-        raise typer.Exit(code=1) from None
-
-
-@policy_app.command("dry-run")
-def policy_dry_run(file: typer.FileText) -> None:
-    """Show actions a policy would perform without applying them."""
-    policy = utils.load_policy(file.read())
-    for target in policy.get("targets", []):
-        msg = (
-            f"Would resize {target['lpar']} -> "
-            f"cpu={target['cpu']}, mem={target['mem']}"
-        )
-        console.print(msg)
-
-
-@app.callback(invoke_without_command=True)
-def main(
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose logging"
-    ),
-    quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Reduce output to warnings and errors"
-    ),
-    no_verify: bool = typer.Option(
-        False, "--no-verify", help="Disable TLS verification"
-    ),
-    version: bool = typer.Option(
-        False, "--version", help="Show version and exit"
-    ),
+@app.command()
+def apply(
+    policy_file: Path,
+    run_id: str = typer.Option(None),
+    output: Path = typer.Option(Path("run")),
+    apply: bool = typer.Option(False, help="Apply changes"),
+    confirm: bool = typer.Option(False, help="Confirm apply"),
+    audit_log: Path | None = typer.Option(None),
 ) -> None:
-    """Global options."""
-    if version:
-        typer.echo(__version__)
-        raise typer.Exit()
-    utils.setup_logging(verbose, quiet=quiet)
-    if no_verify:
-        console.print(
-            "[bold red]Warning: TLS verification disabled[/bold red]",
-            style="bold red",
+    """Apply a policy with confirmation."""
+    rid = run_id or uuid4().hex
+    logger = get_logger(rid)
+    policy = Policy.model_validate_json(policy_file.read_text())
+    output.mkdir(parents=True, exist_ok=True)
+    preview = [t.model_dump() for t in policy.targets]
+    (output / f"apply-{rid}.json").write_text(json.dumps(preview, indent=2))
+    _print_table([{**t} for t in preview])
+    if not apply:
+        logger.info("dry_run", targets=len(preview))
+        return
+    if not confirm:
+        typer.echo("Use --confirm to proceed", err=True)
+        raise typer.Exit(1)
+    cfg = load()
+    client = HMCClient(cfg.base_url, run_id=rid)
+    audit = AuditLogger(audit_log) if audit_log else None
+    for target in policy.targets:
+        client.post(
+            f"/api/lpars/{target.lpar}/resize",
+            json={"cpu": target.cpu, "mem": target.mem},
         )
+        if audit:
+            audit.write(target.model_dump())
+    client.close()
+    logger.info("policy_applied", targets=len(preview))
+
+
+@app.callback()
+def main(run_id: str = typer.Option(None, help="Run identifier")) -> None:
+    pass
 
 
 if __name__ == "__main__":  # pragma: no cover
