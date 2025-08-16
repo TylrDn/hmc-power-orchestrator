@@ -37,6 +37,10 @@ def resize(
         f"cpu={cpu}, mem={mem}"
     )
     console.log(msg)
+    if not dry_run and not yes:
+        proceed = typer.confirm("Apply changes?", default=False)
+        if not proceed:
+            raise typer.Exit()
     if not dry_run:
         client.resize_lpar(lpar, cpu, mem)
 
@@ -64,7 +68,7 @@ def policy_dry_run(file: typer.FileText) -> None:
         console.print(msg)
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging"

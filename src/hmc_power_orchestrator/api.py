@@ -1,6 +1,7 @@
 """Minimal HMC REST API client."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterable
 
 from .config import Settings
@@ -13,7 +14,9 @@ class HMCClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         verify: bool | str = (
-            settings.verify if settings.ca_bundle is None else str(settings.ca_bundle)
+            str(settings.verify)
+            if isinstance(settings.verify, Path)
+            else settings.verify
         )
         self._client = HTTPClient(
             base_url=settings.base_url,

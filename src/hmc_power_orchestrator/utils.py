@@ -44,5 +44,8 @@ def load_policy(text: str) -> dict[str, Any]:
     """Load a policy definition from YAML/JSON text."""
     data = yaml.safe_load(text)
     if not isinstance(data, dict) or "targets" not in data:
-        raise ValueError("policy must contain a 'targets' mapping")
+        present_keys = list(data.keys()) if isinstance(data, dict) else None
+        raise ValueError(
+            f"policy must contain a 'targets' mapping; present keys: {present_keys}"
+        )
     return data

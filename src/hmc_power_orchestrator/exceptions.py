@@ -19,3 +19,10 @@ class AuthError(HttpError):
 
 class RateLimitError(HttpError):
     """HMC signalled we exceeded a rate limit."""
+
+
+class NetworkError(RuntimeError):
+    """Network-level error while communicating with the HMC."""
+
+    def __init__(self, exc: requests.RequestException) -> None:
+        super().__init__(str(exc))
