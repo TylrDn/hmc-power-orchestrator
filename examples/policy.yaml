@@ -1,0 +1,10 @@
+min_vcpu: 1
+max_vcpu: 32
+scale_up_cpu_ready_pct: 20
+scale_down_cpu_idle_pct: 70
+min_mem_mb: 4096
+max_mem_mb: 262144
+scale_up_mem_free_mb: 1024
+scale_down_mem_free_mb: 8192
+step_mem_mb: 1024
+exclude_lpars: ["VIOS1", "VIOS2"]

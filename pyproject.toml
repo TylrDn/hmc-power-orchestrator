@@ -1,0 +1,22 @@
+[project]
+name = "hmc-power-orchestrator"
+version = "0.1.0"
+description = "CLI to interact with IBM HMC APIs"
+authors = [{name = "Example", email = "example@example.com"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "python-dotenv",
+    "PyYAML",
+    "tabulate",
+]
+
+[project.scripts]
+hmc-orchestrator = "hmc_orchestrator.cli:main"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 88
