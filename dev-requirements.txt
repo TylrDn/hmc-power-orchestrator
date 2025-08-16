@@ -1,8 +1,7 @@
 -r requirements.txt
-pytest
-pytest-cov
-responses
-black
-ruff
-mypy
-pre-commit
+pytest>=7
+pytest-cov>=4
+responses>=0.25
+ruff>=0.5
+mypy>=1.8
+coverage>=7
