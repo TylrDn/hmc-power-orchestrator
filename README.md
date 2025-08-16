@@ -29,6 +29,17 @@ export HMC_USER=myuser
 # omit HMC_PASS to be prompted securely
 ```
 
+Alternatively, configuration values can be provided in a YAML file at
+`~/.hmc_orchestrator.yaml`:
+
+```yaml
+host: hmc.example.com
+username: myuser
+password: secret
+# verify: true
+# ca_bundle: /path/to/ca.pem
+```
+
 Listing LPARs:
 
 ```bash

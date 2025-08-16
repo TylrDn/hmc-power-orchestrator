@@ -18,3 +18,15 @@ def test_missing_host(monkeypatch):
     monkeypatch.setenv("HMC_PASS", "p")
     with pytest.raises(config.ConfigError):
         config.load()
+
+
+def test_file_config_fallback(tmp_path, monkeypatch):
+    cfg_file = tmp_path / ".hmc_orchestrator.yaml"
+    cfg_file.write_text("host: hmc\nusername: user\npassword: secret\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("HMC_HOST", raising=False)
+    monkeypatch.delenv("HMC_USER", raising=False)
+    monkeypatch.delenv("HMC_PASS", raising=False)
+    cfg = config.load()
+    assert cfg.username == "user"
+    assert cfg.base_url == "https://hmc"
