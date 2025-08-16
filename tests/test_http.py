@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 import requests
 
@@ -8,21 +10,21 @@ from hmc_power_orchestrator.exceptions import (
     RateLimitError,
     TransientError,
 )
-from hmc_power_orchestrator.http import HTTPClient
+from hmc_power_orchestrator.http import CircuitBreakerState, HTTPClient
 
 
-def _fake_response(code: int):
+def _fake_response(code: int) -> Any:
     class Resp:
         status_code = code
         text = "oops"
 
-        def json(self):
+        def json(self) -> dict[str, Any]:
             return {}
 
     return Resp()
 
 
-def test_retry_config():
+def test_retry_config() -> None:
     client = HTTPClient("https://example.com", retries=5)
     adapter = client._session.get_adapter("https://")
     retry = adapter.max_retries
@@ -31,11 +33,11 @@ def test_retry_config():
     assert "GET" in retry.allowed_methods
 
 
-def test_url_join(monkeypatch):
+def test_url_join(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HTTPClient("https://example.com/api")
     called = {}
 
-    def fake_request(method, url, **kwargs):
+    def fake_request(method: str, url: str, **kwargs: Any) -> Any:
         called["url"] = url
         return _fake_response(200)
 
@@ -44,7 +46,7 @@ def test_url_join(monkeypatch):
     assert called["url"] == "https://example.com/api/foo"
 
 
-def test_error_mapping(monkeypatch):
+def test_error_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HTTPClient("https://example.com")
 
     monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(401))
@@ -64,10 +66,10 @@ def test_error_mapping(monkeypatch):
         client.get("/")
 
 
-def test_network_error(monkeypatch):
+def test_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HTTPClient("https://example.com")
 
-    def boom(*a, **k):
+    def boom(*a: Any, **k: Any) -> None:
         raise requests.ConnectionError("fail")
 
     monkeypatch.setattr(client._session, "request", boom)
@@ -75,10 +77,10 @@ def test_network_error(monkeypatch):
         client.get("/")
 
 
-def test_circuit_breaker(monkeypatch):
+def test_circuit_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HTTPClient("https://example.com", cb_threshold=2, cb_cooldown=60)
 
-    def boom(*a, **k):
+    def boom(*a: Any, **k: Any) -> None:
         raise requests.Timeout("fail")
 
     monkeypatch.setattr(client._session, "request", boom)
@@ -91,17 +93,17 @@ def test_circuit_breaker(monkeypatch):
         client.get("/")
 
 
-def test_circuit_breaker_recovery(monkeypatch):
+def test_circuit_breaker_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HTTPClient("https://example.com", cb_threshold=2, cb_cooldown=60)
 
-    fake_time = [0.0]
+    fake_time: list[float] = [0.0]
 
-    def fake_monotonic():
+    def fake_monotonic() -> float:
         return fake_time[0]
 
     monkeypatch.setattr("hmc_power_orchestrator.http.monotonic", fake_monotonic)
 
-    def boom(*a, **k):
+    def boom(*a: Any, **k: Any) -> None:
         raise requests.Timeout("fail")
 
     monkeypatch.setattr(client._session, "request", boom)
@@ -113,11 +115,11 @@ def test_circuit_breaker_recovery(monkeypatch):
     # move time forward past cooldown and return success
     fake_time[0] = 61.0
 
-    def succeed(*a, **k):
-        assert client._cb_state == "half-open"
+    def succeed(*a: Any, **k: Any) -> Any:
+        assert client._cb_state == CircuitBreakerState.HALF_OPEN
         return _fake_response(200)
 
     monkeypatch.setattr(client._session, "request", succeed)
     client.get("/")
-    assert client._cb_state == "closed"
+    assert client._cb_state == CircuitBreakerState.CLOSED
     assert client._cb_failures == 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from threading import Lock
 from time import monotonic
 from typing import Any
@@ -20,6 +21,12 @@ from .exceptions import (
 )
 
 
+class CircuitBreakerState(Enum):
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half-open"
+
+
 class _CircuitBreaker:
     """Thread-safe state tracker implementing a basic circuit breaker."""
 
@@ -27,7 +34,7 @@ class _CircuitBreaker:
         self._threshold = threshold
         self._cooldown = cooldown
         self._failures = 0
-        self._state = "closed"  # closed | open | half-open
+        self._state = CircuitBreakerState.CLOSED
         self._opened_at = 0.0
         self._lock = Lock()
 
@@ -40,34 +47,34 @@ class _CircuitBreaker:
         """
 
         with self._lock:
-            if self._state == "open":
+            if self._state == CircuitBreakerState.OPEN:
                 if monotonic() - self._opened_at < self._cooldown:
                     raise TransientError(method, url, snippet="circuit open")
                 # cooldown passed – allow a single probe request
-                self._state = "half-open"
-            elif self._state == "half-open":
+                self._state = CircuitBreakerState.HALF_OPEN
+            elif self._state == CircuitBreakerState.HALF_OPEN:
                 # another probe already in progress
                 raise TransientError(method, url, snippet="circuit open")
 
     def record_success(self) -> None:
         with self._lock:
             self._failures = 0
-            self._state = "closed"
+            self._state = CircuitBreakerState.CLOSED
 
     def record_failure(self) -> None:
         with self._lock:
-            if self._state == "half-open":
-                self._state = "open"
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._state = CircuitBreakerState.OPEN
                 self._opened_at = monotonic()
                 self._failures = self._threshold
                 return
             self._failures += 1
             if self._failures >= self._threshold:
-                self._state = "open"
+                self._state = CircuitBreakerState.OPEN
                 self._opened_at = monotonic()
 
     @property
-    def state(self) -> str:
+    def state(self) -> CircuitBreakerState:
         return self._state
 
     @property
@@ -112,7 +119,9 @@ class HTTPClient:
         self._cb = _CircuitBreaker(cb_threshold, cb_cooldown)
 
     @property
-    def _cb_state(self) -> str:  # pragma: no cover - for tests/introspection
+    def _cb_state(
+        self,
+    ) -> CircuitBreakerState:  # pragma: no cover - for tests/introspection
         return self._cb.state
 
     @property
