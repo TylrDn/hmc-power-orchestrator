@@ -1,5 +1,8 @@
+import logging
+
 from typer.testing import CliRunner
 
+from hmc_power_orchestrator import __version__
 from hmc_power_orchestrator.cli import app
 
 
@@ -27,3 +30,19 @@ def test_policy_validate_failure(tmp_path):
     runner = CliRunner()
     result = runner.invoke(app, ["policy", "validate", str(file)])
     assert result.exit_code != 0
+
+
+def test_global_version():
+    runner = CliRunner()
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == __version__
+
+
+def test_global_quiet_sets_error_level(tmp_path):
+    file = tmp_path / "policy.yaml"
+    file.write_text("targets: []\n")
+    runner = CliRunner()
+    result = runner.invoke(app, ["--quiet", "policy", "validate", str(file)])
+    assert result.exit_code == 0
+    assert logging.getLogger().getEffectiveLevel() == logging.ERROR

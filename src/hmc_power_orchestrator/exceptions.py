@@ -19,3 +19,7 @@ class AuthError(HttpError):
 
 class RateLimitError(HttpError):
     """HMC signalled we exceeded a rate limit."""
+
+
+class NetworkError(RuntimeError):
+    """A network issue occurred while making a request."""

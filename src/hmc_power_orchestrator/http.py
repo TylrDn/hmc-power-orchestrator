@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from urllib.parse import urljoin
 from typing import Any
+from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .exceptions import AuthError, HttpError, RateLimitError
+from .exceptions import AuthError, HttpError, NetworkError, RateLimitError
 
 
 class HTTPClient:
@@ -46,7 +46,12 @@ class HTTPClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
-        response = self._session.request(method, url, timeout=self.timeout, **kwargs)
+        try:
+            response = self._session.request(
+                method, url, timeout=self.timeout, **kwargs
+            )
+        except requests.RequestException as exc:  # pragma: no cover - network errors
+            raise NetworkError(str(exc)) from exc
         if response.status_code == 401:
             raise AuthError(response)
         if response.status_code == 429:

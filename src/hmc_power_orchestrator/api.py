@@ -12,9 +12,10 @@ class HMCClient:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        verify: bool | str = (
-            settings.verify if settings.ca_bundle is None else str(settings.ca_bundle)
-        )
+        if settings.ca_bundle is not None:
+            verify: bool | str = str(settings.ca_bundle) if settings.verify else False
+        else:
+            verify = settings.verify
         self._client = HTTPClient(
             base_url=settings.base_url,
             auth=(settings.username, settings.password),

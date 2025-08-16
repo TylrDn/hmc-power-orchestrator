@@ -17,6 +17,7 @@ def setup_logging(verbose: bool, quiet: bool = False) -> None:
     else:
         level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
+    logging.getLogger().setLevel(level)
 
 
 def parse_bool(value: Optional[str], *, default: bool = False) -> bool:
@@ -44,5 +45,8 @@ def load_policy(text: str) -> dict[str, Any]:
     """Load a policy definition from YAML/JSON text."""
     data = yaml.safe_load(text)
     if not isinstance(data, dict) or "targets" not in data:
-        raise ValueError("policy must contain a 'targets' mapping")
+        present_keys = list(data.keys()) if isinstance(data, dict) else None
+        raise ValueError(
+            f"policy must contain a 'targets' mapping; present keys: {present_keys}"
+        )
     return data

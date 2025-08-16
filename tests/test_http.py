@@ -1,6 +1,12 @@
 import pytest
+import requests
 
-from hmc_power_orchestrator.exceptions import AuthError, HttpError, RateLimitError
+from hmc_power_orchestrator.exceptions import (
+    AuthError,
+    HttpError,
+    NetworkError,
+    RateLimitError,
+)
 from hmc_power_orchestrator.http import HTTPClient
 
 
@@ -50,4 +56,15 @@ def test_error_mapping(monkeypatch):
 
     monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(500))
     with pytest.raises(HttpError):
+        client.get("/")
+
+
+def test_network_error(monkeypatch):
+    client = HTTPClient("https://example.com")
+
+    def boom(*a, **k):
+        raise requests.ConnectionError("boom")
+
+    monkeypatch.setattr(client._session, "request", boom)
+    with pytest.raises(NetworkError):
         client.get("/")

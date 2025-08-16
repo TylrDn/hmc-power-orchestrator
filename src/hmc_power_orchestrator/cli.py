@@ -27,7 +27,6 @@ def resize(
     cpu: int = typer.Option(...),
     mem: int = typer.Option(...),
     dry_run: bool = typer.Option(False, help="Show changes without applying"),
-    yes: bool = typer.Option(False, "--yes", help="Assume yes for any confirmations"),
 ) -> None:
     """Resize CPU or memory for an LPAR."""
     cfg = config.load()
@@ -64,7 +63,7 @@ def policy_dry_run(file: typer.FileText) -> None:
         console.print(msg)
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose logging"
