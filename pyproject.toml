@@ -1,22 +1,42 @@
 [project]
 name = "hmc-power-orchestrator"
 version = "0.1.0"
-description = "CLI to interact with IBM HMC APIs"
-authors = [{name = "Example", email = "example@example.com"}]
+description = "Secure CLI to orchestrate CPU and memory for IBM Power LPARs"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "Project Contributors", email = "contributors@example.com"}]
 dependencies = [
-    "requests",
-    "python-dotenv",
-    "PyYAML",
-    "tabulate",
+    "httpx[http2]>=0.27",
+    "typer>=0.9",
+    "pydantic>=2",
+    "rich>=13",
+    "pyyaml>=6",
+    "tabulate>=0.9",
+]
+optional-dependencies.dev = [
+    "pytest",
+    "pytest-cov",
+    "responses",
+    "black",
+    "ruff",
+    "mypy",
+    "pre-commit",
 ]
 
 [project.scripts]
-hmc-orchestrator = "hmc_orchestrator.cli:main"
+hmc-power = "hmc_power_orchestrator.cli:app"
 
-[tool.pytest.ini_options]
-addopts = "-q"
+[tool.black]
+line-length = 88
 
 [tool.ruff]
+select = ["E", "F", "I", "B"]
 line-length = 88
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=hmc_power_orchestrator --cov-report=term-missing"

@@ -1,70 +1,41 @@
 # hmc-power-orchestrator
 
-`hmc-power-orchestrator` is a small Python CLI for discovering IBM Power
-managed systems and LPARs, fetching basic performance metrics and performing
-simple dynamic LPAR (DLPAR) changes.  It talks directly to the HMC REST APIs
-using `requests` and is intended for demos and automation scripts.
+Secure, scriptable CLI for dynamically managing CPU and memory of IBM Power
+LPARs via the Hardware Management Console (HMC) REST API.
 
-## Prerequisites
+## Features
+- Discover systems and LPARs
+- Resize CPU and memory allocations
+- Dry-run simulation mode
+- Secure credential handling (env or `~/.hmc_orchestrator.yaml`)
+- Rich output and logging
 
-* Python 3.10+
-* Network access to an IBM Hardware Management Console (HMC)
-* An HMC user with sufficient privileges to view systems and perform DLPAR
-  operations
-* Optional: firewall rules or proxies allowing HTTPS access
-
-## Quickstart
-
+## Installation
 ```bash
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # edit with your HMC credentials
-
-# List systems and LPARs
-python -m hmc_orchestrator.cli list-systems
-python -m hmc_orchestrator.cli list-lpars --ms "$HMC_MANAGED_SYSTEM"
+# or: pip install .
 ```
 
-The CLI reads connection details from environment variables or `.env`. If
-`HMC_PASS` is not set, you will be securely prompted for it at runtime.
-
-## Example Policy
-
-A sample autoscaling policy is provided in `examples/policy.yaml`:
-
-```yaml
-min_vcpu: 1
-max_vcpu: 32
-scale_up_cpu_ready_pct: 20
-scale_down_cpu_idle_pct: 70
-min_mem_mb: 4096
-max_mem_mb: 262144
-scale_up_mem_free_mb: 1024
-scale_down_mem_free_mb: 8192
-step_mem_mb: 1024
-exclude_lpars: ["VIOS1", "VIOS2"]
+## Usage
+```bash
+hmc-power list
+hmc-power resize LPAR1 --cpu 4 --mem 8192 --dry-run
 ```
 
-The CLI currently does not implement automatic policy enforcement, but the
-above file serves as a reference for future work.
+### Authentication
+- Environment variables: `HMC_URL`, `HMC_USERNAME`, `HMC_PASSWORD`
+- Optional YAML config: `~/.hmc_orchestrator.yaml`
+- Custom CA bundle via `HMC_CA_BUNDLE`
 
-## Safety Notes
-
-* TLS certificate verification is **enabled** by default. Use `--no-verify`
-  with caution.
-* The CLI is safe-by-default: destructive actions require explicit flags such
-  as `--yes` (not implemented in this minimal example).
-* Credentials are loaded from `.env`; avoid committing real secrets.
-
-## Troubleshooting
-
-* `AuthError`: verify your HMC user and password and that the account has the
-  correct roles.
-* `PCM metrics not available`: the target LPAR or HMC may not have Performance
-  and Capacity Monitoring enabled.
+## Example Workflow
+1. View current LPAR inventory  
+   `hmc-power list`
+2. Resize an LPAR with confirmation  
+   `hmc-power resize LPAR1 --cpu 8 --mem 16384`
+3. Perform dry-run before applying  
+   `hmc-power resize LPAR1 --cpu 8 --mem 16384 --dry-run`
 
 ## License
-
-This project is licensed under the Apache 2.0 license.  See `LICENSE` for
-details.  This software is provided as-is without warranty.
+Apache-2.0
