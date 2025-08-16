@@ -3,9 +3,10 @@ import requests
 
 from hmc_power_orchestrator.exceptions import (
     AuthError,
-    HttpError,
     NetworkError,
+    PermanentError,
     RateLimitError,
+    TransientError,
 )
 from hmc_power_orchestrator.http import HTTPClient
 
@@ -55,7 +56,11 @@ def test_error_mapping(monkeypatch):
         client.get("/")
 
     monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(500))
-    with pytest.raises(HttpError):
+    with pytest.raises(TransientError):
+        client.get("/")
+
+    monkeypatch.setattr(client._session, "request", lambda *a, **k: _fake_response(404))
+    with pytest.raises(PermanentError):
         client.get("/")
 
 
@@ -67,4 +72,20 @@ def test_network_error(monkeypatch):
 
     monkeypatch.setattr(client._session, "request", boom)
     with pytest.raises(NetworkError):
+        client.get("/")
+
+
+def test_circuit_breaker(monkeypatch):
+    client = HTTPClient("https://example.com", cb_threshold=2, cb_cooldown=60)
+
+    def boom(*a, **k):
+        raise requests.Timeout("fail")
+
+    monkeypatch.setattr(client._session, "request", boom)
+    with pytest.raises(NetworkError):
+        client.get("/")
+    with pytest.raises(NetworkError):
+        client.get("/")
+    # circuit should now be open and raise without calling request
+    with pytest.raises(TransientError):
         client.get("/")
