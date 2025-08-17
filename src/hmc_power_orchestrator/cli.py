@@ -11,11 +11,18 @@ from rich.table import Table
 
 from .config import load
 from .hmc_client import HMCClient
-from .observability import AuditLogger, get_logger
+from .observability import METRIC_APPLY, AuditLogger, get_logger
 from .policy import Policy
 
 app = typer.Typer(help="IBM HMC LPAR CPU/memory orchestrator")
 console = Console()
+
+# Typer option instances defined at module scope to satisfy lint rules.
+run_id_option = typer.Option(None, help="Run identifier")
+output_option = typer.Option(Path("run"))
+apply_option = typer.Option(False, help="Apply changes")
+confirm_option = typer.Option(False, help="Confirm apply")
+audit_log_option = typer.Option(None)
 
 
 def _print_table(rows: list[dict[str, str]]) -> None:
@@ -29,7 +36,7 @@ def _print_table(rows: list[dict[str, str]]) -> None:
 
 
 @app.command()
-def inventory(run_id: str = typer.Option(None)) -> None:
+def inventory(run_id: str = run_id_option) -> None:
     """List LPAR inventory."""
     rid = run_id or uuid4().hex
     cfg = load()
@@ -42,8 +49,8 @@ def inventory(run_id: str = typer.Option(None)) -> None:
 @app.command()
 def plan(
     policy_file: Path,
-    run_id: str = typer.Option(None),
-    output: Path = typer.Option(Path("run")),
+    run_id: str = run_id_option,
+    output: Path = output_option,
 ) -> None:
     """Preview actions for a policy."""
     rid = run_id or uuid4().hex
@@ -59,11 +66,11 @@ def plan(
 @app.command()
 def apply(
     policy_file: Path,
-    run_id: str = typer.Option(None),
-    output: Path = typer.Option(Path("run")),
-    apply: bool = typer.Option(False, help="Apply changes"),
-    confirm: bool = typer.Option(False, help="Confirm apply"),
-    audit_log: Path | None = typer.Option(None),
+    run_id: str = run_id_option,
+    output: Path = output_option,
+    apply: bool = apply_option,
+    confirm: bool = confirm_option,
+    audit_log: Path | None = audit_log_option,
 ) -> None:
     """Apply a policy with confirmation."""
     rid = run_id or uuid4().hex
@@ -82,19 +89,44 @@ def apply(
     cfg = load()
     client = HMCClient(cfg.base_url, run_id=rid)
     audit = AuditLogger(audit_log) if audit_log else None
-    for target in policy.targets:
-        client.post(
-            f"/api/lpars/{target.lpar}/resize",
-            json={"cpu": target.cpu, "mem": target.mem},
-        )
-        if audit:
-            audit.write(target.model_dump())
-    client.close()
-    logger.info("policy_applied", targets=len(preview))
+    successes = 0
+    failures: list[tuple[str, str]] = []
+    try:
+        for target in policy.targets:
+            try:
+                resp = client.post(
+                    f"/api/lpars/{target.lpar}/resize",
+                    json={"cpu": target.cpu, "mem": target.mem},
+                )
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"HTTP {resp.status_code}")
+            except Exception as exc:
+                reason = str(exc)
+                failures.append((target.lpar, reason))
+                logger.error("apply_failed", lpar=target.lpar, reason=reason)
+                METRIC_APPLY.labels(outcome="failure").inc()
+                continue
+            if audit:
+                audit.write(target.model_dump())
+            logger.info("apply_success", lpar=target.lpar)
+            METRIC_APPLY.labels(outcome="success").inc()
+            successes += 1
+    finally:
+        client.close()
+
+    if failures:
+        for lpar, reason in failures:
+            typer.echo(f"{lpar}: {reason}", err=True)
+        typer.echo(f"{successes} succeeded, {len(failures)} failed", err=True)
+        logger.error("apply_complete", successes=successes, failures=len(failures))
+        raise typer.Exit(1)
+
+    typer.echo(f"{successes} succeeded, 0 failed")
+    logger.info("policy_applied", targets=successes)
 
 
 @app.callback()
-def main(run_id: str = typer.Option(None, help="Run identifier")) -> None:
+def main(run_id: str = run_id_option) -> None:
     pass
 
 

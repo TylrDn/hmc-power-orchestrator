@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,14 @@ METRIC_LATENCY = Histogram(
     "hmc_client_request_seconds",
     "Request latency",
     labelnames=("method", "endpoint"),
+)
+
+# Track outcomes for the apply command.  Consumers may scrape these metrics
+# to build dashboards or alerts.
+METRIC_APPLY = Counter(
+    "hmc_apply_targets_total",
+    "Targets processed by apply command",
+    labelnames=("outcome",),
 )
 
 
