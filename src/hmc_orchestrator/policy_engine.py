@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Policy evaluation engine for dry-run operations."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Dict, Iterable, List, Optional
 
 import yaml
@@ -42,7 +42,7 @@ def load_policy(path: str, schema_path: str) -> Dict:
 def _within_window(window: Optional[str], now: Optional[datetime] = None) -> bool:
     if not window:
         return True
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc)
     try:
         hours, days = window.split(",") if "," in window else (window, "Mon-Sun")
         start_s, end_s = hours.split("-")
@@ -109,7 +109,9 @@ def evaluate(
             step = rule_cfg.get("min_cpu_step", 1.0)
             min_cpu = rule_cfg.get("min_cpu", 0)
             max_cpu = rule_cfg.get("max_cpu")
-            if high is not None and util > high and (max_cpu is None or target_cpu < max_cpu):
+            if high is not None and util > high and (
+                max_cpu is None or target_cpu < max_cpu
+            ):
                 target_cpu = min(max_cpu or target_cpu + step, target_cpu + step)
                 reasons.append("CPU above high threshold")
             elif low is not None and util < low and target_cpu > min_cpu:
