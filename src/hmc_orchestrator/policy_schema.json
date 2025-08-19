@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["rules"],
+  "properties": {
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "min_cpu": {"type": "number", "minimum": 0},
+        "max_cpu": {"type": "number"},
+        "min_mem_mb": {"type": "integer", "minimum": 0},
+        "max_mem_mb": {"type": "integer"},
+        "min_cpu_step": {"type": "number", "minimum": 0.1},
+        "min_mem_step_mb": {"type": "integer", "minimum": 128},
+        "cooldown_sec": {"type": "integer", "minimum": 0},
+        "hysteresis_pct": {"type": "number", "minimum": 0},
+        "window": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["match", "targets"],
+        "properties": {
+          "match": {
+            "type": "object",
+            "properties": {
+              "lpar_names": {"type": "array", "items": {"type": "string"}},
+              "lpar_uuids": {"type": "array", "items": {"type": "string"}},
+              "labels": {"type": "object", "additionalProperties": {"type": "string"}}
+            },
+            "additionalProperties": false
+          },
+          "targets": {
+            "type": "object",
+            "properties": {
+              "cpu_util_high_pct": {"type": "number"},
+              "cpu_util_low_pct": {"type": "number"},
+              "mem_util_high_pct": {"type": "number"},
+              "mem_util_low_pct": {"type": "number"}
+            },
+            "additionalProperties": false
+          },
+          "overrides": {"$ref": "#/properties/defaults"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

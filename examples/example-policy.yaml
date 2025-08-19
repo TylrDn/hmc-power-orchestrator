@@ -1,0 +1,14 @@
+# Example autoscaling policy
+defaults:
+  min_cpu: 1.0
+  max_cpu: 4.0
+  min_cpu_step: 1.0
+  cooldown_sec: 300
+  window: "09:00-17:00,Mon-Fri"
+
+rules:
+  - match:
+      lpar_names: ["LPAR1"]
+    targets:
+      cpu_util_high_pct: 80
+      cpu_util_low_pct: 20

@@ -1,67 +1,56 @@
-# hmc-power-orchestrator
+# HMC Power Orchestrator
 
-Production ready CLI to inspect and resize IBM Power HMC logical partitions.
-
-Features include:
-
-- resilient HTTP client with retries and correlation IDs
-- policy planning and guarded apply (`--apply --confirm`)
-- structured JSON logging and Prometheus metrics
-- append only audit log
+CLI tool to inventory IBM Power systems and evaluate autoscaling policies for
+Logical Partitions (LPARs). This repository provides a safe dry‑run engine with
+structured logging and strict schema validation.
 
 ## Quickstart
 
 ```bash
-pip install hmc-power-orchestrator
-# or with pipx
-pipx install hmc-power-orchestrator
+python -m venv .venv && . .venv/bin/activate
+pip install -e .[dev]
 ```
 
-Create `~/.hmc_orchestrator.yaml` with your credentials and then:
-
-```bash
-hmc-orchestrator inventory
-hmc-orchestrator plan examples/example-policy.json
-hmc-orchestrator apply examples/example-policy.json --apply --confirm
-```
-
-Each run uses a unique run id (override with `--run-id`). Previews and apply
-artifacts are written under `--output` (default `./run`).
-
-## Configuration
-
-Environment variables or `~/.hmc_orchestrator.yaml` are supported:
+Create a configuration file or environment variables. Credentials can also be
+loaded from a `.env` file.
 
 ```yaml
+# ~/.hmc_orchestrator.yaml
 host: hmc.example.com
-username: myuser
-password: secret
+username: svc_hmc
+password: ${HMC_PASS}
 ```
 
-## Policy Schema
-
-Policies are versioned. Example v1 policy:
-
-```json
-{
-  "policy_version": 1,
-  "targets": [
-    {"lpar": "L1", "cpu": 2, "mem": 2048}
-  ]
-}
-```
-
-Generate the JSON schema via:
+Run the CLI:
 
 ```bash
-python -c "import json, hmc_power_orchestrator.policy as p; print(p.Policy().to_json_schema())"
+hmc-orchestrator list --json
+hmc-orchestrator policy validate examples/example-policy.yaml
+hmc-orchestrator policy dry-run examples/example-policy.yaml --report report.json
 ```
 
-## Safety Rails
+## Configuration precedence
 
-`apply` requires both `--apply` and `--confirm`. Without `--apply` a dry run is
-performed. Outputs are logged in structured JSON and optional audit log via
-`--audit-log file`.
+1. CLI flags
+2. Environment variables / `.env`
+3. YAML file (`~/.hmc_orchestrator.yaml`)
+
+Supported environment variables mirror the YAML keys, e.g. `HMC_HOST`,
+`HMC_USERNAME`, `HMC_PASSWORD`, `HMC_VERIFY`.
+
+## Testing
+
+```bash
+pytest -q
+```
+
+## Operator runbook
+
+1. Ensure PCM/LTM is enabled on all frames hosting IBM i LPARs.
+2. Run `hmc-orchestrator list --json` regularly and archive the output.
+3. Validate and dry-run policies. Review the dry-run report before any manual
+   resize.
+4. Never disable TLS verification in production; provide a CA bundle if needed.
 
 ## License
 

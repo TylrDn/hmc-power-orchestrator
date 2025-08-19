@@ -1,25 +1,84 @@
+import json
+from pathlib import Path
+
+import json
+from pathlib import Path
+
+import pytest
+from httpx import MockTransport, Response
 from typer.testing import CliRunner
 
-from hmc_power_orchestrator.cli import app
+from hmc_orchestrator.cli import app, HmcSession
 
 
-def _policy(tmp_dir):
-    p = tmp_dir / 'p.json'
-    p.write_text('{"policy_version":1,"targets":[{"lpar":"L1","cpu":2,"mem":2048}]}')
-    return p
+@pytest.fixture(autouse=True)
+def _env(monkeypatch):
+    monkeypatch.setenv("HMC_HOST", "hmc")
+    monkeypatch.setenv("HMC_USERNAME", "user")
+    monkeypatch.setenv("HMC_PASSWORD", "pass")
+    monkeypatch.setenv("HMC_VERIFY", "false")
 
 
-def test_apply_confirmation(tmp_path):
-    file = _policy(tmp_path)
+def _transport():
+    async def handler(request):
+        if request.url.path == "/rest/api/web/Logon":
+            return Response(200)
+        if request.url.path == "/rest/api/uom/ManagedSystem":
+            return Response(200, json={"Items": [{"uuid": "ms1", "name": "Frame1"}]})
+        if request.url.path == "/rest/api/uom/LogicalPartition":
+            return Response(
+                200,
+                json={
+                    "Items": [
+                        {
+                            "uuid": "l1",
+                            "name": "LPAR1",
+                            "state": "Running",
+                            "entitledProcUnits": 1.0,
+                            "memory": 1024,
+                        }
+                    ]
+                },
+            )
+        return Response(404)
+
+    return MockTransport(handler)
+
+
+def _patch_session(monkeypatch, transport):
+    class TSession(HmcSession):
+        def __init__(self, cfg):
+            super().__init__(cfg, transport=transport)
+
+    monkeypatch.setattr("hmc_orchestrator.cli.HmcSession", TSession)
+
+
+def test_list_json(monkeypatch):
+    transport = _transport()
+    _patch_session(monkeypatch, transport)
     runner = CliRunner()
-    result = runner.invoke(app, ['apply', str(file), '--apply', '--run-id', 'abc'])
-    assert result.exit_code != 0
-    assert 'confirm' in result.output.lower()
-
-
-def test_plan_output(tmp_path):
-    file = _policy(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(app, ['plan', str(file), '--run-id', 'abc', '--output', str(tmp_path)])
+    result = runner.invoke(app, ["list", "--json"])
     assert result.exit_code == 0
-    assert (tmp_path / 'plan-abc.json').exists()
+    data = json.loads(result.stdout)
+    assert data[0]["lpars"][0]["name"] == "LPAR1"
+
+
+def test_policy_commands(monkeypatch, tmp_path: Path):
+    transport = _transport()
+    _patch_session(monkeypatch, transport)
+    runner = CliRunner()
+    result = runner.invoke(app, ["policy", "validate", "examples/example-policy.yaml"])
+    assert result.exit_code == 0
+    report = tmp_path / "report.json"
+    result = runner.invoke(
+        app,
+        [
+            "policy",
+            "dry-run",
+            "examples/example-policy.yaml",
+            "--report",
+            str(report),
+        ],
+    )
+    assert result.exit_code == 0
+    assert report.is_file()
