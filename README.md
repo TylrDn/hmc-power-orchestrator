@@ -1,5 +1,7 @@
 # HMC Power Orchestrator
 
+[![DeepSource](https://app.deepsource.com/gh/TylrDn/hmc-power-orchestrator.svg/?label=code+coverage&show_trend=true&token=mkkonFVMzeR2W82xag2rBFCf)](https://app.deepsource.com/gh/TylrDn/hmc-power-orchestrator/)
+
 CLI tool to inventory IBM Power systems and evaluate autoscaling policies for
 Logical Partitions (LPARs). This repository provides a safe dry‑run engine with
 structured logging and strict schema validation.
@@ -43,6 +45,13 @@ Supported environment variables mirror the YAML keys, e.g. `HMC_HOST`,
 ```bash
 pytest -q
 ```
+
+## Code quality
+
+DeepSource currently reports around **27%** code coverage, indicating a low level
+of confidence in the test suite. See the
+[DeepSource dashboard](https://app.deepsource.com/gh/TylrDn/hmc-power-orchestrator/)
+for more details and coverage trends.
 
 ## Operator runbook
 
