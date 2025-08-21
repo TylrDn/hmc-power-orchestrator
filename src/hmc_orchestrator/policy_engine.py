@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 
 import yaml
@@ -35,9 +36,20 @@ class Decision:
 
 
 def load_policy(path: str) -> Dict[str, Any]:
-    """Load policy and perform minimal structural validation."""
+    """Load policy and perform minimal structural validation.
 
-    with open(path, "r", encoding="utf8") as fh:
+    Only paths within the current working directory tree are accepted to
+    avoid directory traversal to unintended locations.
+    """
+
+    base_dir = Path.cwd().resolve()
+    policy_path = Path(path).expanduser().resolve()
+    try:
+        policy_path.relative_to(base_dir)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise ValueError("invalid policy path") from exc
+
+    with policy_path.open("r", encoding="utf8") as fh:
         policy = yaml.safe_load(fh)
     # Minimal validation: ensure required fields exist
     if not isinstance(policy, dict) or "rules" not in policy:
