@@ -1,0 +1,35 @@
+name: Test coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install -r requirements.txt || true
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=src --cov-report=xml
+
+      - name: Install DeepSource CLI
+        run: curl https://deepsource.io/cli | sh
+
+      - name: Report coverage to DeepSource
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+        run: ./bin/deepsource report --analyzer test-coverage --key python --value-file coverage.xml
