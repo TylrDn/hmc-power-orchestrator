@@ -4,12 +4,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 
 import yaml
 
 from .exceptions import SchemaError
 from .hmc_api import LogicalPartition
+
+
+class CpuPolicyCfg(TypedDict, total=False):
+    cpu_util_high_pct: float
+    cpu_util_low_pct: float
+    min_cpu_step: float
+    min_cpu: float
+    max_cpu: float
+    window: str
 
 
 @dataclass
@@ -25,7 +34,7 @@ class Decision:
     cooldown_remaining: int
 
 
-def load_policy(path: str, schema_path: str) -> Dict:
+def load_policy(path: str, schema_path: str) -> Dict[str, Any]:
     """Load policy and perform minimal structural validation."""
 
     with open(path, "r", encoding="utf8") as fh:
@@ -79,9 +88,9 @@ def _within_window(window: Optional[str], now: Optional[datetime] = None) -> boo
 
 
 def _match_rule(
-    rules: List[Dict], lp: LogicalPartition, defaults: Dict
-) -> Optional[Dict]:
-    rule_cfg = defaults.copy()
+    rules: List[Dict[str, Any]], lp: LogicalPartition, defaults: CpuPolicyCfg
+) -> Optional[CpuPolicyCfg]:
+    rule_cfg: CpuPolicyCfg = defaults.copy()
     for rule in rules:
         match = rule["match"]
         names = match.get("lpar_names", [])
@@ -94,28 +103,27 @@ def _match_rule(
 
 
 def _adjust_cpu(
-    current: float, util: float, cfg: Dict
+    current: float, util: float, cfg: CpuPolicyCfg
 ) -> Tuple[float, Optional[str]]:
-    """Determine new CPU entitlement and reason.
+    """Determine new CPU entitlement and reason."""
 
-    Returns the updated entitlement along with the reason for the change,
-    or ``None`` when no adjustment is required.
-    """
     high = cfg.get("cpu_util_high_pct")
     low = cfg.get("cpu_util_low_pct")
-    step = cfg.get("min_cpu_step", 1.0)
-    min_cpu = cfg.get("min_cpu", 0)
+    step = float(cfg.get("min_cpu_step", 1.0))
+    if step <= 0:
+        raise ValueError("min_cpu_step must be positive")
+    min_cpu = float(cfg.get("min_cpu", 0))
     max_cpu = cfg.get("max_cpu")
+    max_cpu_f = float(max_cpu) if max_cpu is not None else None
 
-    if high is not None and util > high and (
-        max_cpu is None or current < max_cpu
-    ):
-        new_target = current + step
-        if max_cpu is not None:
-            new_target = min(max_cpu, new_target)
-        return new_target, "CPU above high threshold"
+    if high is not None and util > float(high):
+        if max_cpu_f is None or current < max_cpu_f:
+            new_target = current + step
+            if max_cpu_f is not None:
+                new_target = min(max_cpu_f, new_target)
+            return new_target, "CPU above high threshold"
 
-    if low is not None and util < low and current > min_cpu:
+    if low is not None and util < float(low) and current > min_cpu:
         new_target = max(min_cpu, current - step)
         return new_target, "CPU below low threshold"
 
@@ -124,7 +132,7 @@ def _adjust_cpu(
 
 def _compute_decision(
     lp: LogicalPartition,
-    cfg: Dict,
+    cfg: CpuPolicyCfg,
     metric: Dict[str, float],
     now: Optional[datetime],
 ) -> Decision:
@@ -136,9 +144,10 @@ def _compute_decision(
 
     if cooldown > 0:
         reasons.append("Cooldown active")
-    elif not _within_window(window, now=now):
+    if not _within_window(window, now=now):
         reasons.append("Window closed")
-    else:
+
+    if not reasons:
         target_cpu, reason = _adjust_cpu(target_cpu, util, cfg)
         if reason:
             reasons.append(reason)
@@ -157,12 +166,12 @@ def _compute_decision(
 
 
 def evaluate(
-    policy: Dict,
+    policy: Dict[str, Any],
     lpars: List[LogicalPartition],
     metrics: Dict[str, Dict[str, float]],
     now: Optional[datetime] = None,
 ) -> List[Decision]:
-    defaults = policy.get("defaults", {})
+    defaults = cast(CpuPolicyCfg, policy.get("defaults", {}))
     decisions: List[Decision] = []
     for lp in lpars:
         cfg = _match_rule(policy["rules"], lp, defaults)
