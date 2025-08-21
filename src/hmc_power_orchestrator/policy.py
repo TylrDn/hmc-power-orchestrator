@@ -1,10 +1,9 @@
 """Policy schema and validation models."""
 from __future__ import annotations
 
-from datetime import time
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 
 class Target(BaseModel):
