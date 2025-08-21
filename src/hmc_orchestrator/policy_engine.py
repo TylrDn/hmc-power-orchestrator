@@ -34,7 +34,7 @@ class Decision:
     cooldown_remaining: int
 
 
-def load_policy(path: str, schema_path: str) -> Dict[str, Any]:
+def load_policy(path: str) -> Dict[str, Any]:
     """Load policy and perform minimal structural validation."""
 
     with open(path, "r", encoding="utf8") as fh:

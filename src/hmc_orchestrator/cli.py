@@ -75,7 +75,7 @@ def list_cmd(  # type: ignore[override]
 def policy_validate(path: Path) -> None:
     """Validate a policy YAML file."""
 
-    load_policy(str(path), str(Path(__file__).with_name("policy_schema.json")))
+    load_policy(str(path))
     typer.echo("Policy is valid")
 
 
@@ -120,9 +120,7 @@ async def _policy_dry_run(policy_file: Path, report: Optional[Path]) -> None:
     for ms in systems:
         lpars.extend(await api.list_lpars(ms.uuid))
     metrics = {lp.uuid: {"cpu_util_pct": 10.0} for lp in lpars}
-    policy = load_policy(
-        str(policy_file), str(Path(__file__).with_name("policy_schema.json"))
-    )
+    policy = load_policy(str(policy_file))
     decisions = evaluate(policy, lpars, metrics)
     await sess.logout()
     await sess.close()
