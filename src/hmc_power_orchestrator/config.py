@@ -40,42 +40,47 @@ def _load_file_config() -> dict[str, Any]:
     return {}
 
 
-def load() -> Settings:
-    """Load settings from environment variables or YAML config file."""
-    file_cfg = _load_file_config()
-
-    host = os.getenv("HMC_HOST") or file_cfg.get("host")
-    if not host and (base_url := file_cfg.get("base_url")):
+def _resolve_host(cfg: dict[str, Any]) -> str:
+    host = os.getenv("HMC_HOST") or cfg.get("host")
+    if not host and (base_url := cfg.get("base_url")):
         host = base_url.replace("https://", "").rstrip("/")
     if not host:
         raise ConfigError("Environment variable HMC_HOST is required")
+    return host
 
-    user = os.getenv("HMC_USER") or file_cfg.get("username") or file_cfg.get("user")
+
+def _resolve_user(cfg: dict[str, Any]) -> str:
+    user = os.getenv("HMC_USER") or cfg.get("username") or cfg.get("user")
     if not user:
         raise ConfigError("Environment variable HMC_USER is required")
+    return user
 
-    password = os.getenv("HMC_PASS") or file_cfg.get("password")
-    if not password:
-        password = getpass("HMC password: ")
 
-    ca_bundle_env = os.getenv("HMC_CA_BUNDLE")
-    ca_bundle_file = file_cfg.get("ca_bundle")
-    file_verify = file_cfg.get("verify")
-    default_verify = (
-        parse_bool(str(file_verify), default=True)
-        if file_verify is not None
-        else True
+def _resolve_password(cfg: dict[str, Any]) -> str:
+    return os.getenv("HMC_PASS") or cfg.get("password") or getpass("HMC password: ")
+
+
+def _resolve_verify(cfg: dict[str, Any]) -> bool | Path:
+    ca_env = os.getenv("HMC_CA_BUNDLE")
+    if ca_env:
+        return Path(ca_env)
+    if ca_file := cfg.get("ca_bundle"):
+        return Path(str(ca_file))
+    file_verify = cfg.get("verify")
+    default = (
+        parse_bool(str(file_verify), default=True) if file_verify is not None else True
     )
-    verify: bool | Path
-    if ca_bundle_env:
-        verify = Path(ca_bundle_env)
-    elif ca_bundle_file:
-        verify = Path(str(ca_bundle_file))
-    else:
-        verify = parse_bool(os.getenv("HMC_VERIFY"), default=default_verify)
+    return parse_bool(os.getenv("HMC_VERIFY"), default=default)
 
-    timeout = int(os.getenv("HMC_TIMEOUT", str(file_cfg.get("timeout", 30))))
 
+def load() -> Settings:
+    """Load settings from environment variables or YAML config file."""
+    cfg = _load_file_config()
+    host = _resolve_host(cfg)
+    user = _resolve_user(cfg)
+    password = _resolve_password(cfg)
+    verify = _resolve_verify(cfg)
+    timeout = int(os.getenv("HMC_TIMEOUT", str(cfg.get("timeout", 30))))
     return Settings(
         host=host,
         username=user,

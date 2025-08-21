@@ -29,7 +29,12 @@ def test_evaluate_scale_up():
 
 def test_window_closed():
     policy = {
-        "defaults": {"min_cpu": 1.0, "max_cpu": 4.0, "min_cpu_step": 1.0, "window": "09:00-17:00,Mon-Fri"},
+        "defaults": {
+            "min_cpu": 1.0,
+            "max_cpu": 4.0,
+            "min_cpu_step": 1.0,
+            "window": "09:00-17:00,Mon-Fri",
+        },
         "rules": [
             {
                 "match": {"lpar_names": ["LP1"]},

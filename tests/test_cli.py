@@ -1,14 +1,11 @@
 import json
 from pathlib import Path
 
-import json
-from pathlib import Path
-
 import pytest
 from httpx import MockTransport, Response
 from typer.testing import CliRunner
 
-from hmc_orchestrator.cli import app, HmcSession
+from hmc_orchestrator.cli import HmcSession, app
 
 
 @pytest.fixture(autouse=True)

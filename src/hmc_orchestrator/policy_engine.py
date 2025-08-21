@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
@@ -39,36 +39,101 @@ def load_policy(path: str, schema_path: str) -> Dict:
     return policy
 
 
+def _expand_days(days: str) -> Iterable[str]:
+    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    if "-" in days:
+        start_d, end_d = days.split("-")
+        s_idx = names.index(start_d)
+        e_idx = names.index(end_d)
+        if s_idx <= e_idx:
+            return names[s_idx : e_idx + 1]
+        return names[s_idx:] + names[: e_idx + 1]
+    return [d.strip() for d in days.split(";")]
+
+
+def _parse_window(window: str) -> Tuple[Tuple[time, time], Iterable[str]]:
+    hours, days = window.split(",") if "," in window else (window, "Mon-Sun")
+    start_s, end_s = hours.split("-")
+    start = time.fromisoformat(start_s)
+    end = time.fromisoformat(end_s)
+    return (start, end), _expand_days(days)
+
+
+def _time_in_range(start: time, end: time, value: time) -> bool:
+    if start <= end:
+        return start <= value <= end
+    return value >= start or value <= end
+
+
 def _within_window(window: Optional[str], now: Optional[datetime] = None) -> bool:
     if not window:
         return True
     now = now or datetime.now(timezone.utc)
     try:
-        hours, days = window.split(",") if "," in window else (window, "Mon-Sun")
-        start_s, end_s = hours.split("-")
-        start = time.fromisoformat(start_s)
-        end = time.fromisoformat(end_s)
-        day_name = now.strftime("%a")
-        allowed_days: Iterable[str]
-        if "-" in days:
-            start_d, end_d = days.split("-")
-            names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-            s_idx = names.index(start_d)
-            e_idx = names.index(end_d)
-            if s_idx <= e_idx:
-                allowed_days = names[s_idx : e_idx + 1]
-            else:  # wrap
-                allowed_days = names[s_idx:] + names[: e_idx + 1]
-        else:
-            allowed_days = [d.strip() for d in days.split(";")]
-        if day_name not in allowed_days:
-            return False
-        t = now.time()
-        if start <= end:
-            return start <= t <= end
-        return t >= start or t <= end
+        (start, end), allowed_days = _parse_window(window)
     except Exception:
         return False
+    if now.strftime("%a") not in allowed_days:
+        return False
+    return _time_in_range(start, end, now.time())
+
+
+def _match_rule(
+    rules: List[Dict], lp: LogicalPartition, defaults: Dict
+) -> Optional[Dict]:
+    rule_cfg = defaults.copy()
+    for rule in rules:
+        match = rule["match"]
+        names = match.get("lpar_names", [])
+        uuids = match.get("lpar_uuids", [])
+        if lp.name in names or lp.uuid in uuids:
+            rule_cfg.update(rule.get("overrides", {}))
+            rule_cfg.update(rule["targets"])
+            return rule_cfg
+    return None
+
+
+def _compute_decision(
+    lp: LogicalPartition,
+    cfg: Dict,
+    metric: Dict[str, float],
+    now: Optional[datetime],
+) -> Decision:
+    reasons: List[str] = []
+    target_cpu = lp.cpu_entitlement
+    util = metric.get("cpu_util_pct", 0.0)
+    cooldown = int(metric.get("cooldown", 0))
+    window = cfg.get("window")
+    if cooldown > 0:
+        reasons.append("Cooldown active")
+    elif not _within_window(window, now=now):
+        reasons.append("Window closed")
+    else:
+        high = cfg.get("cpu_util_high_pct")
+        low = cfg.get("cpu_util_low_pct")
+        step = cfg.get("min_cpu_step", 1.0)
+        min_cpu = cfg.get("min_cpu", 0)
+        max_cpu = cfg.get("max_cpu")
+        if high is not None and util > high and (
+            max_cpu is None or target_cpu < max_cpu
+        ):
+            target_cpu = min(max_cpu or target_cpu + step, target_cpu + step)
+            reasons.append("CPU above high threshold")
+        elif low is not None and util < low and target_cpu > min_cpu:
+            target_cpu = max(min_cpu, target_cpu - step)
+            reasons.append("CPU below low threshold")
+    delta_cpu = target_cpu - lp.cpu_entitlement
+    return Decision(
+        frame_uuid="",
+        lpar_uuid=lp.uuid,
+        lpar_name=lp.name,
+        current={"cpu_ent": lp.cpu_entitlement, "mem_mb": lp.memory_mb},
+        target={"cpu_ent": target_cpu, "mem_mb": lp.memory_mb},
+        delta={"cpu_ent": delta_cpu, "mem_mb": 0},
+        reasons=reasons or ["No change"],
+        window=window,
+        cooldown_remaining=cooldown,
+    )
 
 
 def evaluate(
@@ -79,58 +144,12 @@ def evaluate(
 ) -> List[Decision]:
     defaults = policy.get("defaults", {})
     decisions: List[Decision] = []
-
     for lp in lpars:
-        rule_cfg = defaults.copy()
-        for rule in policy["rules"]:
-            match = rule["match"]
-            if lp.name in match.get("lpar_names", []) or lp.uuid in match.get(
-                "lpar_uuids", []
-            ):
-                rule_cfg.update(rule.get("overrides", {}))
-                rule_cfg.update(rule["targets"])
-                break
-        else:
+        cfg = _match_rule(policy["rules"], lp, defaults)
+        if not cfg:
             continue
-
         metric = metrics.get(lp.uuid, {})
-        reasons: List[str] = []
-        target_cpu = lp.cpu_entitlement
-        util = metric.get("cpu_util_pct", 0.0)
-        cooldown = int(metric.get("cooldown", 0))
-        window = rule_cfg.get("window")
-        if cooldown > 0:
-            reasons.append("Cooldown active")
-        elif not _within_window(window, now=now):
-            reasons.append("Window closed")
-        else:
-            high = rule_cfg.get("cpu_util_high_pct")
-            low = rule_cfg.get("cpu_util_low_pct")
-            step = rule_cfg.get("min_cpu_step", 1.0)
-            min_cpu = rule_cfg.get("min_cpu", 0)
-            max_cpu = rule_cfg.get("max_cpu")
-            if high is not None and util > high and (
-                max_cpu is None or target_cpu < max_cpu
-            ):
-                target_cpu = min(max_cpu or target_cpu + step, target_cpu + step)
-                reasons.append("CPU above high threshold")
-            elif low is not None and util < low and target_cpu > min_cpu:
-                target_cpu = max(min_cpu, target_cpu - step)
-                reasons.append("CPU below low threshold")
-        delta_cpu = target_cpu - lp.cpu_entitlement
-        decisions.append(
-            Decision(
-                frame_uuid="",  # filled by caller if needed
-                lpar_uuid=lp.uuid,
-                lpar_name=lp.name,
-                current={"cpu_ent": lp.cpu_entitlement, "mem_mb": lp.memory_mb},
-                target={"cpu_ent": target_cpu, "mem_mb": lp.memory_mb},
-                delta={"cpu_ent": delta_cpu, "mem_mb": 0},
-                reasons=reasons or ["No change"],
-                window=window,
-                cooldown_remaining=cooldown,
-            )
-        )
+        decisions.append(_compute_decision(lp, cfg, metric, now))
     return decisions
 
 
