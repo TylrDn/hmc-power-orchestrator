@@ -27,6 +27,14 @@ def test_evaluate_scale_up():
     assert "CPU above high threshold" in dec.reasons[0]
 
 
+def test_evaluate_scale_down():
+    lp = LogicalPartition("l1", "LP1", "Running", 2.0, 1024)
+    metrics = {"l1": {"cpu_util_pct": 10}}
+    dec = evaluate(POLICY, [lp], metrics)[0]
+    assert dec.delta["cpu_ent"] == -1.0
+    assert "CPU below low threshold" in dec.reasons[0]
+
+
 def test_window_closed():
     policy = {
         "defaults": {

@@ -93,6 +93,35 @@ def _match_rule(
     return None
 
 
+def _adjust_cpu(
+    current: float, util: float, cfg: Dict
+) -> Tuple[float, Optional[str]]:
+    """Determine new CPU entitlement and reason.
+
+    Returns the updated entitlement along with the reason for the change,
+    or ``None`` when no adjustment is required.
+    """
+    high = cfg.get("cpu_util_high_pct")
+    low = cfg.get("cpu_util_low_pct")
+    step = cfg.get("min_cpu_step", 1.0)
+    min_cpu = cfg.get("min_cpu", 0)
+    max_cpu = cfg.get("max_cpu")
+
+    if high is not None and util > high and (
+        max_cpu is None or current < max_cpu
+    ):
+        new_target = current + step
+        if max_cpu is not None:
+            new_target = min(max_cpu, new_target)
+        return new_target, "CPU above high threshold"
+
+    if low is not None and util < low and current > min_cpu:
+        new_target = max(min_cpu, current - step)
+        return new_target, "CPU below low threshold"
+
+    return current, None
+
+
 def _compute_decision(
     lp: LogicalPartition,
     cfg: Dict,
@@ -104,24 +133,15 @@ def _compute_decision(
     util = metric.get("cpu_util_pct", 0.0)
     cooldown = int(metric.get("cooldown", 0))
     window = cfg.get("window")
+
     if cooldown > 0:
         reasons.append("Cooldown active")
     elif not _within_window(window, now=now):
         reasons.append("Window closed")
     else:
-        high = cfg.get("cpu_util_high_pct")
-        low = cfg.get("cpu_util_low_pct")
-        step = cfg.get("min_cpu_step", 1.0)
-        min_cpu = cfg.get("min_cpu", 0)
-        max_cpu = cfg.get("max_cpu")
-        if high is not None and util > high and (
-            max_cpu is None or target_cpu < max_cpu
-        ):
-            target_cpu = min(max_cpu or target_cpu + step, target_cpu + step)
-            reasons.append("CPU above high threshold")
-        elif low is not None and util < low and target_cpu > min_cpu:
-            target_cpu = max(min_cpu, target_cpu - step)
-            reasons.append("CPU below low threshold")
+        target_cpu, reason = _adjust_cpu(target_cpu, util, cfg)
+        if reason:
+            reasons.append(reason)
     delta_cpu = target_cpu - lp.cpu_entitlement
     return Decision(
         frame_uuid="",
