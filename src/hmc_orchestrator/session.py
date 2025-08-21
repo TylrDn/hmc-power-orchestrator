@@ -1,12 +1,13 @@
-from __future__ import annotations
-
 """Asynchronous HMC session management with retries."""
+
+from __future__ import annotations
 
 import asyncio
 import random
 from typing import Any
 
 import httpx
+
 from .config import Config
 from .exceptions import HmcAuthError, HmcRateLimited
 
@@ -14,7 +15,9 @@ from .exceptions import HmcAuthError, HmcRateLimited
 class HmcSession:
     """Manage an authenticated session against the HMC REST API."""
 
-    def __init__(self, cfg: Config, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(
+        self, cfg: Config, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
         self.cfg = cfg
         limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
         timeout = httpx.Timeout(cfg.timeout.read, connect=cfg.timeout.connect)
@@ -45,7 +48,9 @@ class HmcSession:
         await self.client.post("/rest/api/web/Logoff")
         self._logged_in = False
 
-    async def _request_once(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _request_once(
+        self, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response:
         if not self._logged_in:
             await self.login()
         resp = await self.client.request(method, url, **kwargs)

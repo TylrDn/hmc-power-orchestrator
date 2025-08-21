@@ -57,6 +57,28 @@ class HMCClient:
         delay = min(self.retry.backoff_factor * (2**attempt), self.retry.max_backoff)
         return delay + random.random()
 
+    def _handle_response(
+        self, method: str, path: str, response: httpx.Response, attempt: int
+    ) -> httpx.Response | None:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        status = response.status_code
+        if status == 401:
+            raise AuthError(method, url, status, response.text[:200])
+        if status == 429:
+            METRIC_REQUESTS.labels(
+                method=method, endpoint=path, outcome="rate_limit"
+            ).inc()
+            self._sleep(self._backoff(attempt, response.headers.get("Retry-After")))
+            return None
+        if 500 <= status < 600:
+            METRIC_REQUESTS.labels(method=method, endpoint=path, outcome="error").inc()
+            self._sleep(self._backoff(attempt, response.headers.get("Retry-After")))
+            return None
+        if status >= 400:
+            raise PermanentError(method, url, status, response.text[:200])
+        METRIC_REQUESTS.labels(method=method, endpoint=path, outcome="success").inc()
+        return response
+
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = kwargs.pop("headers", {})
@@ -78,23 +100,12 @@ class HMCClient:
                     raise NetworkError(exc) from exc
                 self._sleep(self._backoff(attempt, None))
                 continue
-
-            METRIC_LATENCY.labels(method=method, endpoint=path).observe(time.time() - start)
-            if response.status_code == 401:
-                raise AuthError(method, url, response.status_code, response.text[:200])
-            if response.status_code == 429:
-                METRIC_REQUESTS.labels(method=method, endpoint=path, outcome="rate_limit").inc()
-                self._sleep(self._backoff(attempt, response.headers.get("Retry-After")))
-                continue
-            if 500 <= response.status_code < 600:
-                METRIC_REQUESTS.labels(method=method, endpoint=path, outcome="error").inc()
-                self._sleep(self._backoff(attempt, response.headers.get("Retry-After")))
-                continue
-            if response.status_code >= 400:
-                raise PermanentError(method, url, response.status_code, response.text[:200])
-
-            METRIC_REQUESTS.labels(method=method, endpoint=path, outcome="success").inc()
-            return response
+            METRIC_LATENCY.labels(method=method, endpoint=path).observe(
+                time.time() - start
+            )
+            result = self._handle_response(method, path, response, attempt)
+            if result is not None:
+                return result
         raise TransientError(method, url, snippet="max retries reached")
 
     # ------------------------------------------------------------------

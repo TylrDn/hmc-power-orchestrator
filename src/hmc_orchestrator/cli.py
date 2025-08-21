@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Typer CLI for HMC orchestrator."""
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -11,12 +11,16 @@ import typer
 
 from .config import Config, load_config
 from .hmc_api import HmcApi
-from .policy_engine import evaluate, load_policy
+from .policy_engine import Decision, evaluate, load_policy
 from .session import HmcSession
 
 app = typer.Typer(help="HMC Orchestrator CLI")
 policy_app = typer.Typer(help="Policy commands")
 app.add_typer(policy_app, name="policy")
+
+# Typer instances for argument defaults
+policy_file_arg = typer.Argument(..., exists=True)
+report_option = typer.Option(None, "--report", help="Report file")
 
 
 async def _list(cfg: Config, json_out: bool) -> None:
@@ -51,7 +55,9 @@ async def _list(cfg: Config, json_out: bool) -> None:
             typer.echo(f"Managed System {ms['name']} ({ms['uuid']})")
             for lp in ms["lpars"]:
                 typer.echo(
-                    f"  LPAR {lp['name']} ({lp['uuid']}) state={lp['state']} CPU={lp['cpu_entitlement']} MEM={lp['memory_mb']}"
+                    f"  LPAR {lp['name']} ({lp['uuid']}) "
+                    f"state={lp['state']} CPU={lp['cpu_entitlement']} "
+                    f"MEM={lp['memory_mb']}"
                 )
 
 
@@ -73,6 +79,38 @@ def policy_validate(path: Path) -> None:
     typer.echo("Policy is valid")
 
 
+def _write_report(report: Path, decisions: list[Decision]) -> None:
+    if report.suffix == ".json":
+        with report.open("w", encoding="utf8") as fh:
+            json.dump([d.__dict__ for d in decisions], fh, indent=2)
+        return
+    if report.suffix == ".csv":
+        import csv
+
+        with report.open("w", newline="", encoding="utf8") as fh:
+            writer = csv.DictWriter(
+                fh,
+                fieldnames=[
+                    "frame_uuid",
+                    "lpar_uuid",
+                    "lpar_name",
+                    "current",
+                    "target",
+                    "delta",
+                    "reasons",
+                    "window",
+                    "cooldown_remaining",
+                ],
+            )
+            writer.writeheader()
+            for d in decisions:
+                row = d.__dict__.copy()
+                row["reasons"] = ";".join(d.reasons)
+                writer.writerow(row)
+        return
+    raise typer.BadParameter("report must end with .json or .csv")
+
+
 async def _policy_dry_run(policy_file: Path, report: Optional[Path]) -> None:
     cfg = load_config()
     sess = HmcSession(cfg)
@@ -90,45 +128,19 @@ async def _policy_dry_run(policy_file: Path, report: Optional[Path]) -> None:
     await sess.close()
 
     if report:
-        if report.suffix == ".json":
-            with report.open("w", encoding="utf8") as fh:
-                json.dump([d.__dict__ for d in decisions], fh, indent=2)
-        elif report.suffix == ".csv":
-            import csv
-
-            with report.open("w", newline="", encoding="utf8") as fh:
-                writer = csv.DictWriter(
-                    fh,
-                    fieldnames=[
-                        "frame_uuid",
-                        "lpar_uuid",
-                        "lpar_name",
-                        "current",
-                        "target",
-                        "delta",
-                        "reasons",
-                        "window",
-                        "cooldown_remaining",
-                    ],
-                )
-                writer.writeheader()
-                for d in decisions:
-                    row = d.__dict__.copy()
-                    row["reasons"] = ";".join(d.reasons)
-                    writer.writerow(row)
-        else:
-            raise typer.BadParameter("report must end with .json or .csv")
+        _write_report(report, decisions)
 
     for d in decisions:
         typer.echo(
-            f"{d.lpar_name}: CPU {d.current['cpu_ent']} -> {d.target['cpu_ent']} ({','.join(d.reasons)})"
+            f"{d.lpar_name}: CPU {d.current['cpu_ent']} -> {d.target['cpu_ent']} "
+            f"({','.join(d.reasons)})"
         )
 
 
 @policy_app.command("dry-run")
 def policy_dry_run(
-    policy_file: Path = typer.Argument(..., exists=True),
-    report: Optional[Path] = typer.Option(None, "--report", help="Report file"),
+    policy_file: Path = policy_file_arg,
+    report: Optional[Path] = report_option,
 ) -> None:
     """Dry-run an autoscaling policy."""
 

@@ -12,7 +12,7 @@ from rich.table import Table
 from .config import load
 from .hmc_client import HMCClient
 from .observability import METRIC_APPLY, AuditLogger, get_logger
-from .policy import Policy
+from .policy import Policy, Target
 
 app = typer.Typer(help="IBM HMC LPAR CPU/memory orchestrator")
 console = Console()
@@ -63,6 +63,61 @@ def plan(
     logger.info("plan_generated", targets=len(preview))
 
 
+def _apply_target(
+    client: HMCClient,
+    target: Target,
+    audit: AuditLogger | None,
+    logger,
+) -> tuple[bool, str]:
+    try:
+        resp = client.post(
+            f"/api/lpars/{target.lpar}/resize",
+            json={"cpu": target.cpu, "mem": target.mem},
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+    except Exception as exc:  # pragma: no cover - network errors
+        reason = str(exc)
+        logger.error("apply_failed", lpar=target.lpar, reason=reason)
+        METRIC_APPLY.labels(outcome="failure").inc()
+        return False, reason
+    if audit:
+        audit.write(target.model_dump())
+    logger.info("apply_success", lpar=target.lpar)
+    METRIC_APPLY.labels(outcome="success").inc()
+    return True, ""
+
+
+def _execute_targets(
+    client: HMCClient,
+    policy: Policy,
+    audit: AuditLogger | None,
+    logger,
+) -> tuple[int, list[tuple[str, str]]]:
+    successes = 0
+    failures: list[tuple[str, str]] = []
+    for target in policy.targets:
+        ok, reason = _apply_target(client, target, audit, logger)
+        if ok:
+            successes += 1
+        else:
+            failures.append((target.lpar, reason))
+    return successes, failures
+
+
+def _report_results(
+    successes: int, failures: list[tuple[str, str]], logger
+) -> None:
+    if failures:
+        for lpar, reason in failures:
+            typer.echo(f"{lpar}: {reason}", err=True)
+        typer.echo(f"{successes} succeeded, {len(failures)} failed", err=True)
+        logger.error("apply_complete", successes=successes, failures=len(failures))
+        raise typer.Exit(1)
+    typer.echo(f"{successes} succeeded, 0 failed")
+    logger.info("policy_applied", targets=successes)
+
+
 @app.command()
 def apply(
     policy_file: Path,
@@ -89,40 +144,11 @@ def apply(
     cfg = load()
     client = HMCClient(cfg.base_url, run_id=rid)
     audit = AuditLogger(audit_log) if audit_log else None
-    successes = 0
-    failures: list[tuple[str, str]] = []
     try:
-        for target in policy.targets:
-            try:
-                resp = client.post(
-                    f"/api/lpars/{target.lpar}/resize",
-                    json={"cpu": target.cpu, "mem": target.mem},
-                )
-                if resp.status_code >= 400:
-                    raise RuntimeError(f"HTTP {resp.status_code}")
-            except Exception as exc:
-                reason = str(exc)
-                failures.append((target.lpar, reason))
-                logger.error("apply_failed", lpar=target.lpar, reason=reason)
-                METRIC_APPLY.labels(outcome="failure").inc()
-                continue
-            if audit:
-                audit.write(target.model_dump())
-            logger.info("apply_success", lpar=target.lpar)
-            METRIC_APPLY.labels(outcome="success").inc()
-            successes += 1
+        successes, failures = _execute_targets(client, policy, audit, logger)
     finally:
         client.close()
-
-    if failures:
-        for lpar, reason in failures:
-            typer.echo(f"{lpar}: {reason}", err=True)
-        typer.echo(f"{successes} succeeded, {len(failures)} failed", err=True)
-        logger.error("apply_complete", successes=successes, failures=len(failures))
-        raise typer.Exit(1)
-
-    typer.echo(f"{successes} succeeded, 0 failed")
-    logger.info("policy_applied", targets=successes)
+    _report_results(successes, failures, logger)
 
 
 @app.callback()
