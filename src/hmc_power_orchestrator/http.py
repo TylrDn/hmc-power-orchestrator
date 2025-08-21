@@ -119,7 +119,7 @@ class HTTPClient:
         self._cb = _CircuitBreaker(cb_threshold, cb_cooldown)
 
     @property
-    def cb_state(self) -> CircuitBreakerState:  # pragma: no cover - for tests/introspection
+    def cb_state(self) -> CircuitBreakerState:  # pragma: no cover - for tests
         return self._cb.state
 
     @property

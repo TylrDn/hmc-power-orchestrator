@@ -152,7 +152,7 @@ def apply(
 
 
 @app.callback()
-def main(run_id: str = run_id_option) -> None:
+def main(_run_id: str = run_id_option) -> None:
     pass
 
 

@@ -1,20 +1,20 @@
-from __future__ import annotations
-
 """Configuration loading for HMC orchestrator."""
 
+from __future__ import annotations
+
+import os
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-import os
-
 import yaml
+from pydantic import BaseModel, Field
+
 try:  # pragma: no cover - fallback when python-dotenv missing
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover
     def load_dotenv() -> None:
         return None
-from pydantic import BaseModel, Field
 
 
 class Timeout(BaseModel):
