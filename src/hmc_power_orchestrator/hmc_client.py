@@ -45,7 +45,8 @@ class HMCClient:
         self.log = get_logger(self.run_id)
 
     # ------------------------------------------------------------------
-    def _sleep(self, seconds: float) -> None:
+    @staticmethod
+    def _sleep(seconds: float) -> None:
         time.sleep(seconds)
 
     def _backoff(self, attempt: int, retry_after: str | None) -> float:
