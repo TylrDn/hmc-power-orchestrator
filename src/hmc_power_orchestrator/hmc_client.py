@@ -1,7 +1,6 @@
 """Resilient HTTP client for HMC interactions using httpx."""
 from __future__ import annotations
 
-import json
 import random
 import time
 from dataclasses import dataclass
@@ -14,7 +13,6 @@ from .exceptions import (
     AuthError,
     NetworkError,
     PermanentError,
-    RateLimitError,
     TransientError,
 )
 from .observability import METRIC_LATENCY, METRIC_REQUESTS, get_logger

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Configuration loading for HMC orchestrator."""
 
-from dataclasses import dataclass
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -15,7 +14,7 @@ try:  # pragma: no cover - fallback when python-dotenv missing
 except Exception:  # pragma: no cover
     def load_dotenv() -> None:
         return None
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 
 class Timeout(BaseModel):
