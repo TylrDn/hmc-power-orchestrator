@@ -7,12 +7,12 @@ import logging
 import structlog
 
 
-def setup_logging(json: bool = False) -> None:
+def setup_logging(as_json: bool = False) -> None:
     """Configure structlog for console or JSON output."""
 
     timestamper = structlog.processors.TimeStamper(fmt="iso")
     processors = [timestamper]
-    if json:
+    if as_json:
         processors.append(structlog.processors.JSONRenderer())
     else:
         processors.append(structlog.dev.ConsoleRenderer())

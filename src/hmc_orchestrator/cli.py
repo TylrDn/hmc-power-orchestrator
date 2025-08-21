@@ -61,14 +61,14 @@ async def _list(cfg: Config, json_out: bool) -> None:
                 )
 
 
-@app.command()
-def list(  # type: ignore[override]
-    json: bool = typer.Option(False, "--json", help="Output JSON"),
+@app.command("list")
+def list_cmd(  # type: ignore[override]
+    json_out: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """List managed systems and LPARs."""
 
     cfg = load_config()
-    asyncio.run(_list(cfg, json))
+    asyncio.run(_list(cfg, json_out))
 
 
 @policy_app.command("validate")

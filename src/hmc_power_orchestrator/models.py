@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class LPAR(BaseModel):
-    id: str
+    uuid: str
     name: str
     processors: int
     memory_mb: int
