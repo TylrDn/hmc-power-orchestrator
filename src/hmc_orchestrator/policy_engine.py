@@ -116,18 +116,43 @@ def _adjust_cpu(
     max_cpu = cfg.get("max_cpu")
     max_cpu_f = float(max_cpu) if max_cpu is not None else None
 
-    if high is not None and util > float(high):
-        if max_cpu_f is None or current < max_cpu_f:
-            new_target = current + step
-            if max_cpu_f is not None:
-                new_target = min(max_cpu_f, new_target)
-            return new_target, "CPU above high threshold"
+    if _should_increase(util, high, current, max_cpu_f):
+        return _increase_cpu(current, step, max_cpu_f)
 
-    if low is not None and util < float(low) and current > min_cpu:
-        new_target = max(min_cpu, current - step)
-        return new_target, "CPU below low threshold"
+    if _should_decrease(util, low, current, min_cpu):
+        return _decrease_cpu(current, step, min_cpu)
 
     return current, None
+
+
+def _should_increase(
+    util: float, high: Optional[float], current: float, max_cpu_f: Optional[float]
+) -> bool:
+    return (
+        high is not None
+        and util > float(high)
+        and (max_cpu_f is None or current < max_cpu_f)
+    )
+
+
+def _increase_cpu(
+    current: float, step: float, max_cpu_f: Optional[float]
+) -> Tuple[float, str]:
+    new_target = current + step
+    if max_cpu_f is not None:
+        new_target = min(max_cpu_f, new_target)
+    return new_target, "CPU above high threshold"
+
+
+def _should_decrease(
+    util: float, low: Optional[float], current: float, min_cpu: float
+) -> bool:
+    return low is not None and util < float(low) and current > min_cpu
+
+
+def _decrease_cpu(current: float, step: float, min_cpu: float) -> Tuple[float, str]:
+    new_target = max(min_cpu, current - step)
+    return new_target, "CPU below low threshold"
 
 
 def _compute_decision(

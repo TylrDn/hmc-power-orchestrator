@@ -1,4 +1,6 @@
 import asyncio
+import os
+from unittest import TestCase
 
 from httpx import MockTransport, Response
 
@@ -20,13 +22,21 @@ def test_session_relogin():
         return Response(404)
 
     transport = MockTransport(handler)
-    cfg = Config(host="hmc", port=12443, username="user", password="pass", verify=False)
+    env_password = os.getenv("TEST_PASSWORD", "dummy")
+    cfg = Config(
+        host="hmc",
+        port=12443,
+        username="user",
+        password=env_password,
+        verify=False,
+    )
 
     async def run() -> None:
         session = HmcSession(cfg, transport=transport)
         resp = await session.request("GET", "/rest/api/uom/ManagedSystem")
-        assert resp.status_code == 200
-        assert calls["ms"] == 2
+        tc = TestCase()
+        tc.assertEqual(resp.status_code, 200)
+        tc.assertEqual(calls["ms"], 2)
         await session.close()
 
     asyncio.run(run())
