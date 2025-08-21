@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+from unittest import TestCase
 
 import pytest
 from httpx import MockTransport, Response
@@ -12,7 +14,7 @@ from hmc_orchestrator.cli import HmcSession, app
 def _env(monkeypatch):
     monkeypatch.setenv("HMC_HOST", "hmc")
     monkeypatch.setenv("HMC_USERNAME", "user")
-    monkeypatch.setenv("HMC_PASSWORD", "pass")
+    monkeypatch.setenv("HMC_PASSWORD", os.getenv("TEST_PASSWORD", "dummy"))
     monkeypatch.setenv("HMC_VERIFY", "false")
 
 
@@ -55,9 +57,10 @@ def test_list_json(monkeypatch):
     _patch_session(monkeypatch, transport)
     runner = CliRunner()
     result = runner.invoke(app, ["list", "--json"])
-    assert result.exit_code == 0
+    tc = TestCase()
+    tc.assertEqual(result.exit_code, 0)
     data = json.loads(result.stdout)
-    assert data[0]["lpars"][0]["name"] == "LPAR1"
+    tc.assertEqual(data[0]["lpars"][0]["name"], "LPAR1")
 
 
 def test_policy_commands(monkeypatch, tmp_path: Path):
@@ -65,7 +68,8 @@ def test_policy_commands(monkeypatch, tmp_path: Path):
     _patch_session(monkeypatch, transport)
     runner = CliRunner()
     result = runner.invoke(app, ["policy", "validate", "examples/example-policy.yaml"])
-    assert result.exit_code == 0
+    tc = TestCase()
+    tc.assertEqual(result.exit_code, 0)
     report = tmp_path / "report.json"
     result = runner.invoke(
         app,
@@ -77,5 +81,5 @@ def test_policy_commands(monkeypatch, tmp_path: Path):
             str(report),
         ],
     )
-    assert result.exit_code == 0
-    assert report.is_file()
+    tc.assertEqual(result.exit_code, 0)
+    tc.assertTrue(report.is_file())

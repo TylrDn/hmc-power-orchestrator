@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import random
+from random import SystemRandom
 from typing import Any
 
 import httpx
 
 from .config import Config
 from .exceptions import HmcAuthError, HmcRateLimited
+
+_secure_rand = SystemRandom()
 
 
 class HmcSession:
@@ -77,7 +79,7 @@ class HmcSession:
                     self.cfg.retries.max_backoff,
                     self.cfg.retries.backoff_base * (2 ** (attempt - 1)),
                 )
-                delay += random.uniform(0, self.cfg.retries.backoff_base)
+                delay += _secure_rand.uniform(0, self.cfg.retries.backoff_base)
                 await asyncio.sleep(delay)
 
         raise RuntimeError("unreachable")

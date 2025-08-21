@@ -1,7 +1,7 @@
 """Resilient HTTP client for HMC interactions using httpx."""
 from __future__ import annotations
 
-import random
+import secrets
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator
@@ -55,7 +55,8 @@ class HMCClient:
             except ValueError:
                 pass
         delay = min(self.retry.backoff_factor * (2**attempt), self.retry.max_backoff)
-        return delay + random.random()
+        jitter = secrets.randbelow(1_000_000_000) / 1_000_000_000
+        return float(delay + jitter)
 
     def _handle_response(
         self, method: str, path: str, response: httpx.Response, attempt: int
