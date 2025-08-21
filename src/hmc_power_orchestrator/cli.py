@@ -1,4 +1,5 @@
 """Command-line interface using Typer with safety rails."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,7 @@ console = Console()
 # Typer option instances defined at module scope to satisfy lint rules.
 run_id_option = typer.Option(None, help="Run identifier")
 output_option = typer.Option(Path("run"))
-apply_option = typer.Option(False, help="Apply changes")
+apply_option = typer.Option(False, "--apply", help="Apply changes")
 confirm_option = typer.Option(False, help="Confirm apply")
 audit_log_option = typer.Option(None)
 
@@ -105,9 +106,7 @@ def _execute_targets(
     return successes, failures
 
 
-def _report_results(
-    successes: int, failures: list[tuple[str, str]], logger
-) -> None:
+def _report_results(successes: int, failures: list[tuple[str, str]], logger) -> None:
     if failures:
         for lpar, reason in failures:
             typer.echo(f"{lpar}: {reason}", err=True)
@@ -123,7 +122,7 @@ def apply(
     policy_file: Path,
     run_id: str = run_id_option,
     output: Path = output_option,
-    apply: bool = apply_option,
+    apply_changes: bool = apply_option,
     confirm: bool = confirm_option,
     audit_log: Path | None = audit_log_option,
 ) -> None:
@@ -135,7 +134,7 @@ def apply(
     preview = [t.model_dump() for t in policy.targets]
     (output / f"apply-{rid}.json").write_text(json.dumps(preview, indent=2))
     _print_table([{**t} for t in preview])
-    if not apply:
+    if not apply_changes:
         logger.info("dry_run", targets=len(preview))
         return
     if not confirm:
